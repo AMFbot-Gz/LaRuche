@@ -159,6 +159,53 @@ config/                  ← Providers, tools, agents YAML
 
 ---
 
+## 🌐 Mode Standalone (sans Telegram)
+
+Testez et utilisez LaRuche **sans configurer de bot Telegram** — via l'API REST ou le dashboard web.
+
+```bash
+# Démarrer en mode standalone
+STANDALONE_MODE=true node src/queen_oss.js
+# ou
+npm run standalone
+```
+
+```
+🌐 API Standalone: http://localhost:3000
+📖 Endpoints: http://localhost:3000/
+```
+
+### API REST
+
+```bash
+# Envoyer une mission
+curl -X POST http://localhost:3000/api/mission \
+  -H "Content-Type: application/json" \
+  -d '{"command": "Liste les 5 fichiers les plus gros"}'
+# → {"missionId": "m-...", "status": "pending"}
+
+# Suivre la progression
+curl http://localhost:3000/api/missions/m-...
+# → {"status": "success", "result": "...", "duration": 8421}
+
+# État du système
+curl http://localhost:3000/api/status
+```
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/mission` | Envoyer une mission (async, retourne 202) |
+| `GET /api/missions/:id` | Statut et résultat d'une mission |
+| `GET /api/missions` | Historique paginé |
+| `GET /api/status` | État du système |
+| `GET /api/agents` | Liste des agents actifs |
+| `POST /api/search` | Recherche dans l'historique |
+| `GET /api/health` | Health check |
+
+> Documentation complète : [`docs/STANDALONE_MODE.md`](docs/STANDALONE_MODE.md)
+
+---
+
 ## 🖥️ CLI LaRuche
 
 ```bash

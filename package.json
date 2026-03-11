@@ -15,9 +15,14 @@
     "hud": "electron hud/main.js",
     "dash": "cd dashboard && vite",
     "test": "jest --coverage",
+    "test:standalone": "node test/e2e/standalone.test.js",
+    "test:e2e": "npx playwright test test/e2e/dashboard.spec.js",
+    "test:all": "bash scripts/test-all.sh",
+    "smoke": "node test/smoke.js",
     "install:full": "node scripts/fast_install.js",
     "status": "pm2 status",
-    "logs": "pm2 logs laruche-queen"
+    "logs": "pm2 logs laruche-queen",
+    "standalone": "STANDALONE_MODE=true node src/queen_oss.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

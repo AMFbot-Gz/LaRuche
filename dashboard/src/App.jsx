@@ -1,10 +1,14 @@
 /**
- * App.jsx — LaRuche HQ Dashboard
+ * App.jsx — LaRuche HQ Dashboard v3.2
  * Dark theme #0D0D1A, accents gold #F5A623 + purple #7C3AED
- * StatusGrid | MissionFeed | CostMeter | LogStream | GodButton | TelegramConsole
+ *
+ * Panels : StatusGrid | MissionForm | MissionResults | CostMeter
+ *          LogStream  | GodButton   | TelegramConsole
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import MissionForm from "./components/MissionForm.jsx";
+import MissionResults from "./components/MissionResults.jsx";
 
 const API = "http://localhost:8080";
 const WS_URL = "ws://localhost:8080";
@@ -61,6 +65,7 @@ const StatusGrid = React.memo(function StatusGrid({ status }) {
     { name: "Ollama", key: "ollama", online: status.ollama },
     { name: "HUD", key: "hud", online: status.hud },
     { name: "Vault", key: "vault", online: status.vault },
+    { name: "API", key: "api", online: status.api },
   ];
 
   return (
@@ -82,34 +87,34 @@ const StatusGrid = React.memo(function StatusGrid({ status }) {
   );
 });
 
-// ─── MissionFeed ─────────────────────────────────────────────────────────────
+// ─── MissionFeed (historique compact) ────────────────────────────────────────
 const MissionFeed = React.memo(function MissionFeed({ missions }) {
   return (
-    <div style={{ ...card, flex: 1, overflowY: "auto", maxHeight: 280 }}>
-      <div style={{ color: colors.gold, fontSize: 12, marginBottom: 8 }}>📋 MISSIONS RÉCENTES</div>
+    <div style={{ ...card, overflowY: "auto", maxHeight: 200 }}>
+      <div style={{ color: colors.gold, fontSize: 12, marginBottom: 8 }}>📋 HISTORIQUE RAPIDE</div>
       {missions.length === 0 && (
-        <div style={{ color: colors.muted, fontSize: 11 }}>Aucune mission pour l'instant.</div>
+        <div style={{ color: colors.muted, fontSize: 11 }}>Aucune mission.</div>
       )}
-      {missions.slice(0, 10).map((m, i) => (
+      {missions.slice(0, 8).map((m, i) => (
         <div key={i} style={{
           borderBottom: `1px solid rgba(255,255,255,0.05)`,
-          padding: "6px 0",
+          padding: "5px 0",
           fontSize: 11,
+          display: "flex",
+          gap: 6,
+          alignItems: "center",
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between" }}>
-            <span style={{
-              color: m.status === "success" ? colors.green : colors.red,
-              marginRight: 8,
-            }}>
-              {m.status === "success" ? "✓" : "✗"}
-            </span>
-            <span style={{ color: colors.text, flex: 1 }}>
-              {m.command?.substring(0, 50)}
-            </span>
-            <span style={{ color: colors.muted }}>
+          <span style={{ color: m.status === "success" ? colors.green : colors.red }}>
+            {m.status === "success" ? "✓" : "✗"}
+          </span>
+          <span style={{ color: colors.text, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {m.command?.substring(0, 45)}
+          </span>
+          {m.duration_ms && (
+            <span style={{ color: colors.muted, flexShrink: 0 }}>
               {(m.duration_ms / 1000).toFixed(1)}s
             </span>
-          </div>
+          )}
         </div>
       ))}
     </div>
@@ -158,36 +163,20 @@ const GodButton = React.memo(function GodButton() {
 
   return (
     <div style={{ display: "flex", gap: 8 }}>
-      <button
-        onClick={kill}
-        style={{
-          flex: 1,
-          background: "rgba(239, 68, 68, 0.15)",
-          border: `1px solid ${colors.red}`,
-          color: colors.red,
-          padding: "10px",
-          borderRadius: 8,
-          cursor: "pointer",
-          fontSize: 13,
-          fontWeight: "bold",
-        }}
-      >
+      <button onClick={kill} style={{
+        flex: 1, background: "rgba(239,68,68,0.15)",
+        border: `1px solid ${colors.red}`, color: colors.red,
+        padding: "10px", borderRadius: 8, cursor: "pointer",
+        fontSize: 13, fontWeight: "bold",
+      }}>
         🛑 KILL ALL
       </button>
-      <button
-        onClick={resurrect}
-        style={{
-          flex: 1,
-          background: "rgba(34, 197, 94, 0.15)",
-          border: `1px solid ${colors.green}`,
-          color: colors.green,
-          padding: "10px",
-          borderRadius: 8,
-          cursor: "pointer",
-          fontSize: 13,
-          fontWeight: "bold",
-        }}
-      >
+      <button onClick={resurrect} style={{
+        flex: 1, background: "rgba(34,197,94,0.15)",
+        border: `1px solid ${colors.green}`, color: colors.green,
+        padding: "10px", borderRadius: 8, cursor: "pointer",
+        fontSize: 13, fontWeight: "bold",
+      }}>
         ⚡ RESURRECT
       </button>
     </div>
@@ -218,9 +207,9 @@ const TelegramConsole = React.memo(function TelegramConsole() {
   };
 
   return (
-    <div style={{ ...card, flex: 1 }}>
+    <div style={{ ...card }}>
       <div style={{ color: colors.gold, fontSize: 12, marginBottom: 8 }}>💬 CONSOLE TELEGRAM</div>
-      <div style={{ height: 100, overflowY: "auto", fontSize: 10, color: colors.muted, marginBottom: 8, fontFamily: "monospace" }}>
+      <div style={{ height: 80, overflowY: "auto", fontSize: 10, color: colors.muted, marginBottom: 8, fontFamily: "monospace" }}>
         {log.map((l, i) => <div key={i}>{l}</div>)}
       </div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -228,32 +217,17 @@ const TelegramConsole = React.memo(function TelegramConsole() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Envoyer une commande..."
+          placeholder="Commande Telegram..."
           style={{
-            flex: 1,
-            background: "rgba(255,255,255,0.05)",
-            border: `1px solid ${colors.border}`,
-            borderRadius: 6,
-            padding: "6px 10px",
-            color: colors.text,
-            fontSize: 12,
-            outline: "none",
+            flex: 1, background: "rgba(255,255,255,0.05)",
+            border: `1px solid ${colors.border}`, borderRadius: 6,
+            padding: "6px 10px", color: colors.text, fontSize: 12, outline: "none",
           }}
         />
-        <button
-          onClick={send}
-          style={{
-            background: colors.purple,
-            border: "none",
-            borderRadius: 6,
-            color: "white",
-            padding: "6px 14px",
-            cursor: "pointer",
-            fontSize: 12,
-          }}
-        >
-          ▶
-        </button>
+        <button onClick={send} style={{
+          background: colors.purple, border: "none", borderRadius: 6,
+          color: "white", padding: "6px 14px", cursor: "pointer", fontSize: 12,
+        }}>▶</button>
       </div>
     </div>
   );
@@ -265,9 +239,9 @@ function LogStream({ logs }) {
   useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight; }, [logs]);
 
   return (
-    <div style={{ ...card, flex: 1 }}>
+    <div style={{ ...card }}>
       <div style={{ color: colors.gold, fontSize: 12, marginBottom: 8 }}>📜 LOGS TEMPS RÉEL</div>
-      <div ref={ref} style={{ height: 150, overflowY: "auto", fontSize: 10, fontFamily: "monospace" }}>
+      <div ref={ref} style={{ height: 120, overflowY: "auto", fontSize: 10, fontFamily: "monospace" }}>
         {logs.slice(-100).map((l, i) => (
           <div key={i} style={{ color: l.includes("ERROR") ? colors.red : colors.muted, padding: "1px 0" }}>
             {l}
@@ -284,6 +258,8 @@ function App() {
   const [missions, setMissions] = useState([]);
   const [costs, setCosts] = useState({ daily: 0, total: 0 });
   const [logs, setLogs] = useState(["LaRuche HQ connecté..."]);
+  const [activeMissionId, setActiveMissionId] = useState(null);
+  const [wsEventHistory, setWsEventHistory] = useState([]);
 
   // Chargement initial
   useEffect(() => {
@@ -294,11 +270,12 @@ function App() {
           fetch(`${API}/api/missions`).then((r) => r.json()),
           fetch(`${API}/api/costs`).then((r) => r.json()),
         ]);
-        setStatus(statusRes);
+        setStatus({ ...statusRes, api: true });
         setMissions(missionsRes.missions || []);
         setCosts(costsRes);
       } catch (e) {
         setLogs((prev) => [...prev, `Erreur chargement: ${e.message}`]);
+        setStatus((prev) => ({ ...prev, api: false }));
       }
     };
     load();
@@ -307,13 +284,14 @@ function App() {
   }, []);
 
   // WebSocket temps réel
-  useWebSocket(WS_URL, (event) => {
+  useWebSocket(WS_URL, useCallback((event) => {
     if (event.type === "mission_complete") {
       fetch(`${API}/api/missions`).then((r) => r.json()).then((d) => setMissions(d.missions || []));
       fetch(`${API}/api/costs`).then((r) => r.json()).then(setCosts);
     }
-    setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${event.type}: ${event.command || event.task || ""}`]);
-  });
+    setWsEventHistory((prev) => [...prev.slice(-50), event]);
+    setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${event.type}${event.command ? `: ${event.command.substring(0, 40)}` : ""}`]);
+  }, []));
 
   return (
     <div style={{
@@ -324,32 +302,59 @@ function App() {
       color: colors.text,
     }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
-        <div style={{ fontSize: 24 }}>🐝</div>
-        <div style={{ marginLeft: 12 }}>
-          <div style={{ fontSize: 18, fontWeight: "bold", color: colors.gold }}>LaRuche HQ</div>
-          <div style={{ fontSize: 11, color: colors.muted }}>v3.0 SINGULARITY — Ghost Swarm</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <div style={{ fontSize: 24 }}>🐝</div>
+          <div style={{ marginLeft: 12 }}>
+            <div style={{ fontSize: 18, fontWeight: "bold", color: colors.gold }}>LaRuche HQ</div>
+            <div style={{ fontSize: 11, color: colors.muted }}>v3.2 — Ghost Swarm · 100% Local</div>
+          </div>
+        </div>
+        <div style={{ fontSize: 10, color: colors.muted }}>
+          {status.api ? (
+            <span style={{ color: colors.green }}>● API connectée</span>
+          ) : (
+            <span style={{ color: colors.red }}>● API déconnectée</span>
+          )}
         </div>
       </div>
 
-      {/* Grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "280px 1fr 280px", gap: 16 }}>
-        {/* Colonne gauche */}
+      {/* Grid principale */}
+      <div style={{ display: "grid", gridTemplateColumns: "260px 1fr 260px", gap: 16 }}>
+
+        {/* ── Colonne gauche ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <StatusGrid status={status} />
           <CostMeter costs={costs} />
+          <MissionFeed missions={missions} />
           <GodButton />
         </div>
 
-        {/* Colonne centrale */}
+        {/* ── Colonne centrale — Playground missions ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <MissionFeed missions={missions} />
-          <LogStream logs={logs} />
+          <MissionForm
+            onMissionStart={(id, cmd) => {
+              setActiveMissionId(id);
+              setLogs((prev) => [...prev, `[Mission] Envoyée: ${cmd.substring(0, 60)}`]);
+            }}
+            onMissionComplete={(mission) => {
+              setLogs((prev) => [
+                ...prev,
+                `[Mission] ${mission.status === "success" ? "✅ Terminée" : "❌ Erreur"} en ${(mission.duration / 1000).toFixed(1)}s`,
+              ]);
+              fetch(`${API}/api/missions`).then((r) => r.json()).then((d) => setMissions(d.missions || []));
+            }}
+          />
+          <MissionResults
+            activeMissionId={activeMissionId}
+            wsEvents={wsEventHistory}
+          />
         </div>
 
-        {/* Colonne droite */}
+        {/* ── Colonne droite ── */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <TelegramConsole />
+          <LogStream logs={logs} />
         </div>
       </div>
     </div>
