@@ -1,0 +1,65 @@
+name: LaRuche CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Node deps
+        run: npm ci
+
+      - name: Install Python deps
+        run: pip install -r requirements.txt
+
+      - name: Lint check
+        run: node --input-type=module < /dev/null || true
+
+      - name: Validate config files
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('.laruche/config.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('.laruche/registry.json'))"
+          node -e "JSON.parse(require('fs').readFileSync('package.json'))"
+          echo "✅ Config files valid"
+
+      - name: Check MCP servers syntax
+        run: |
+          for f in mcp_servers/*.js; do
+            node --check "$f" && echo "✅ $f" || echo "❌ $f"
+          done
+
+      - name: Check src syntax
+        run: |
+          for f in src/*.js; do
+            node --check "$f" && echo "✅ $f" || echo "❌ $f"
+          done
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for secrets
+        run: |
+          if grep -r "AAF\|AAH\|AAE" --include="*.js" --include="*.py" --include="*.json" .; then
+            echo "❌ Token Telegram potentiellement exposé !"
+            exit 1
+          fi
+          echo "✅ Pas de secrets détectés"

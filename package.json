@@ -2,6 +2,10 @@
   "name": "laruche-bot",
   "version": "3.0.0",
   "description": "Ghost Swarm Autonomous Agent — LaRuche v3.0 SINGULARITY",
+  "bin": {
+    "laruche": "./bin/laruche.js",
+    "laruche-skill": "./bin/laruche-skill-runner.js"
+  },
   "main": "src/queen.js",
   "type": "module",
   "scripts": {
