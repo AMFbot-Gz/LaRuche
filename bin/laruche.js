@@ -466,4 +466,53 @@ program
     }
   });
 
+// ─── laruche models ───────────────────────────────────────────────────────────
+program
+  .command("models")
+  .description("Voir et configurer les modèles Ollama (auto-détection)")
+  .option("--set-role <role=model>", "Forcer un modèle pour un rôle (ex: architect=qwen3-coder:14b)")
+  .action(async (opts) => {
+    const { autoDetectRoles, getAvailableModels } = await import("../src/model_router.js");
+
+    console.log(chalk.hex("#F5A623").bold("\n🐝 Configuration Modèles LaRuche\n"));
+
+    const spinner = ora("Interrogation Ollama...").start();
+    const [roles, available] = await Promise.all([autoDetectRoles(), getAvailableModels()]);
+    spinner.stop();
+
+    const icons = {
+      strategist:  "👑 L1 Stratège   ",
+      architect:   "🔧 L2 Architecte ",
+      worker:      "⚡ L3 Ouvrière   ",
+      vision:      "👁 L4 Vision     ",
+      visionFast:  "📷 L4 Vision fast",
+      synthesizer: "🧠 Synthèse      ",
+    };
+
+    for (const [role, model] of Object.entries(roles)) {
+      console.log(`  ${chalk.dim(icons[role] || role)} → ${chalk.cyan(model)}`);
+    }
+
+    console.log(chalk.bold(`\n  Modèles Ollama disponibles (${available.length}):`));
+    available.forEach((m) => {
+      const used = Object.values(roles).includes(m);
+      console.log(`  ${used ? chalk.green("✓") : chalk.dim("○")} ${m}`);
+    });
+
+    if (opts.setRole) {
+      const [role, model] = opts.setRole.split("=");
+      if (role && model) {
+        const { readFileSync, writeFileSync } = await import("fs");
+        const configPath = join(ROOT, ".laruche/config.json");
+        const config = JSON.parse(readFileSync(configPath, "utf-8"));
+        if (!config.models) config.models = {};
+        config.models[role] = model;
+        writeFileSync(configPath, JSON.stringify(config, null, 2));
+        console.log(chalk.green(`\n✅ Rôle "${role}" → "${model}" configuré`));
+      }
+    }
+
+    console.log(chalk.dim(`\n  Pour forcer un modèle: laruche models --set-role architect=qwen3-coder:14b\n`));
+  });
+
 program.parse();

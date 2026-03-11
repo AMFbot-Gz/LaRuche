@@ -14,5 +14,14 @@
   "textModel": "llama3.2:3b",
   "hudPort": 9001,
   "dashboardPort": 8080,
-  "apiPort": 3000
+  "apiPort": 3000,
+  "models": {
+    "strategist": null,
+    "architect": null,
+    "worker": null,
+    "vision": null,
+    "visionFast": null,
+    "synthesizer": null,
+    "_comment": "null = auto-detect depuis Ollama. Remplacer par nom exact pour forcer un modele."
+  }
 }
