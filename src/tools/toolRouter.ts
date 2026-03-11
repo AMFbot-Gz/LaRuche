@@ -28,6 +28,7 @@ const MCP_SERVERS: Record<string, { command: string; args: string[] }> = {
   "mcp-skill-factory": { command: "node", args: ["mcp_servers/skill_factory_mcp.js"] },
   "mcp-rollback":      { command: "node", args: ["mcp_servers/rollback_mcp.js"] },
   "mcp-janitor":       { command: "node", args: ["mcp_servers/janitor_mcp.js"] },
+  "mcp-browser":       { command: "node", args: ["mcp_servers/browser_mcp.js"] },
 };
 
 // Tool name → MCP server + function mapping (from config/agents.yml tools section)
@@ -64,6 +65,15 @@ const TOOL_MAP: Record<string, { mcp: string; fn: string }> = {
   "janitor.purge":    { mcp: "mcp-janitor", fn: "purgeTemp" },
   "janitor.gc":       { mcp: "mcp-janitor", fn: "gcRAM" },
   "janitor.stats":    { mcp: "mcp-janitor", fn: "getStats" },
+  // Browser / OS macros
+  "os.openApp":                      { mcp: "mcp-browser", fn: "os.openApp" },
+  "os.focusApp":                     { mcp: "mcp-browser", fn: "os.focusApp" },
+  "browser.goto":                    { mcp: "mcp-browser", fn: "browser.goto" },
+  "browser.typeInFocusedField":      { mcp: "mcp-browser", fn: "browser.typeInFocusedField" },
+  "browser.pressEnter":              { mcp: "mcp-browser", fn: "browser.pressEnter" },
+  "browser.searchYouTube":           { mcp: "mcp-browser", fn: "browser.searchYouTube" },
+  "browser.clickFirstYoutubeResult": { mcp: "mcp-browser", fn: "browser.clickFirstYoutubeResult" },
+  "browser.pressKey":                { mcp: "mcp-browser", fn: "browser.pressKey" },
 };
 
 // ─── Access control ───────────────────────────────────────────────────────────

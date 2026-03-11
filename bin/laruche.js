@@ -689,4 +689,44 @@ program
     console.log();
   });
 
+// ─── laruche intent ───────────────────────────────────────────────────────────
+program
+  .command("intent <text...>")
+  .description("Pipeline planner+operator sur une intention naturelle")
+  .action(async (textParts) => {
+    const intent = textParts.join(" ");
+    console.log(chalk.hex("#F5A623").bold(`\n🧠 Intention: "${intent}"\n`));
+
+    const spinner = ora(chalk.dim("Planification...")).start();
+
+    try {
+      const { runIntentPipeline } = await import("../src/agents/intentPipeline.js");
+
+      const result = await runIntentPipeline(intent, {
+        onPlanReady: (plan) => {
+          spinner.succeed(chalk.green(`Plan: ${plan.goal}`));
+          plan.steps.forEach((s, i) => {
+            console.log(`  ${chalk.dim(i + 1 + ".")} ${chalk.cyan(s.skill)} ${chalk.dim(JSON.stringify(s.params))}`);
+          });
+          console.log();
+        },
+        onStepDone: (cur, total, step, res) => {
+          const icon = res?.success !== false ? chalk.green("✓") : chalk.red("✗");
+          console.log(`  ${icon} ${step.skill}`);
+        },
+      });
+
+      console.log();
+      if (result.success) {
+        console.log(chalk.green(`✅ Terminé — ${(result.duration / 1000).toFixed(1)}s`));
+      } else {
+        console.log(chalk.yellow(`⚠ Partiel: ${result.error || "certaines étapes ont échoué"}`));
+      }
+      console.log();
+    } catch (e) {
+      spinner.fail(chalk.red(e.message));
+      process.exit(1);
+    }
+  });
+
 program.parse();

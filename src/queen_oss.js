@@ -319,15 +319,83 @@ bot.command("agent", async (ctx) => {
   }
 });
 
-// Messages libres → mission directe
+// /intent — forcer le pipeline planner+operator sur une intention
+bot.command("intent", async (ctx) => {
+  const text = ctx.message.text.replace("/intent", "").trim();
+  if (!text) { await ctx.reply("Usage: /intent <intention>\nEx: /intent mets-moi de la musique"); return; }
+
+  const { runIntentPipeline } = await import("./agents/intentPipeline.js");
+  const statusMsg = await ctx.reply(`🧠 Pipeline intention: _"${text.slice(0, 60)}"_`, { parse_mode: "Markdown" });
+
+  try {
+    const result = await runIntentPipeline(text, {
+      hudFn: hud,
+      onPlanReady: async (planResult) => {
+        const stepList = planResult.steps.map((s, i) => `  ${i + 1}. \`${s.skill}\``).join("\n");
+        await ctx.telegram.editMessageText(
+          ctx.chat.id, statusMsg.message_id, undefined,
+          `📋 *${planResult.goal}*\n\n${stepList}\n\n_Exécution en cours..._`,
+          { parse_mode: "Markdown" }
+        ).catch(() => {});
+      },
+    });
+
+    const duration = (result.duration / 1000).toFixed(1);
+    const icon = result.success ? "✅" : "⚠️";
+    await ctx.reply(`${icon} *${result.goal}*\n_${result.steps.length} étapes — ${duration}s — ${result.model || "local"}_`, { parse_mode: "Markdown" });
+
+  } catch (e) { await ctx.reply(`❌ ${e.message}`); }
+});
+
+// Messages libres → détection intention computer-use ou mission texte
 bot.on("text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return;
+  const text = ctx.message.text.trim();
+
   try {
-    const result = await butterflyLoop(ctx.message.text, ctx);
-    for (const chunk of splitMsg(result)) {
-      await ctx.reply(chunk, { parse_mode: "Markdown" });
+    // Détection intention computer-use (ouvre, lance, mets de la musique...)
+    const { isComputerUseIntent, runIntentPipeline } = await import("./agents/intentPipeline.js");
+
+    if (isComputerUseIntent(text)) {
+      // Pipeline planner + operator
+      const statusMsg = await ctx.reply(`🧠 Planification: _"${text.slice(0, 60)}"_`, { parse_mode: "Markdown" });
+
+      const pipelineResult = await runIntentPipeline(text, {
+        hudFn: hud,
+        onPlanReady: async (planResult) => {
+          const stepList = planResult.steps.map((s, i) => `  ${i + 1}. \`${s.skill}\``).join("\n");
+          await ctx.telegram.editMessageText(
+            ctx.chat.id, statusMsg.message_id, undefined,
+            `📋 *${planResult.goal}*\n\n${stepList}`,
+            { parse_mode: "Markdown" }
+          ).catch(() => {});
+        },
+        onStepDone: (current, total, step, result) => {
+          const icon = result?.success !== false ? "✅" : "❌";
+          logger.info(`[intent] Step ${current}/${total}: ${icon} ${step.skill}`);
+        },
+      });
+
+      const duration = (pipelineResult.duration / 1000).toFixed(1);
+      const icon = pipelineResult.success ? "✅" : "⚠️";
+      const reply = pipelineResult.success
+        ? `${icon} *${pipelineResult.goal}*\n_${pipelineResult.steps.length} étapes — ${duration}s_`
+        : `${icon} *Partiel:* ${pipelineResult.goal}\n_${pipelineResult.error || "Certaines étapes ont échoué"}_`;
+
+      await ctx.reply(reply, { parse_mode: "Markdown" });
+      saveMission({ command: text, status: pipelineResult.success ? "success" : "partial", duration: pipelineResult.duration, ts: new Date().toISOString() });
+
+    } else {
+      // Mission texte classique → butterfly loop
+      const result = await butterflyLoop(text, ctx);
+      for (const chunk of splitMsg(result)) {
+        await ctx.reply(chunk, { parse_mode: "Markdown" });
+      }
     }
-  } catch (e) { await ctx.reply(`❌ ${e.message}`); }
+  } catch (e) {
+    logger.error(`Text handler: ${e.message}`);
+    await ctx.reply(`❌ ${e.message}`);
+  }
 });
 
 // ─── Démarrage ────────────────────────────────────────────────────────────────
