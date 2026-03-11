@@ -10,9 +10,9 @@
 
 import { plan, isComputerUseIntent } from "./planner.js";
 import { execa } from "execa";
-import { join, dirname, existsSync } from "path";
+import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { readdirSync } from "fs";
+import { readdirSync, existsSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "../..");
