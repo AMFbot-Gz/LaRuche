@@ -37,7 +37,11 @@ function useWebSocket(url, onMessage) {
     const connect = () => {
       try {
         ws.current = new WebSocket(url);
+        let lastMsg = 0;
         ws.current.onmessage = (e) => {
+          const now = Date.now();
+          if (now - lastMsg < 100) return; // max 10 events/s
+          lastMsg = now;
           try { onMessage(JSON.parse(e.data)); } catch {}
         };
         ws.current.onclose = () => setTimeout(connect, 3000);
@@ -51,7 +55,7 @@ function useWebSocket(url, onMessage) {
 }
 
 // ─── StatusGrid ───────────────────────────────────────────────────────────────
-function StatusGrid({ status }) {
+const StatusGrid = React.memo(function StatusGrid({ status }) {
   const services = [
     { name: "Queen", key: "queen", online: true },
     { name: "Ollama", key: "ollama", online: status.ollama },
@@ -76,10 +80,10 @@ function StatusGrid({ status }) {
       ))}
     </div>
   );
-}
+});
 
 // ─── MissionFeed ─────────────────────────────────────────────────────────────
-function MissionFeed({ missions }) {
+const MissionFeed = React.memo(function MissionFeed({ missions }) {
   return (
     <div style={{ ...card, flex: 1, overflowY: "auto", maxHeight: 280 }}>
       <div style={{ color: colors.gold, fontSize: 12, marginBottom: 8 }}>📋 MISSIONS RÉCENTES</div>
@@ -110,10 +114,10 @@ function MissionFeed({ missions }) {
       ))}
     </div>
   );
-}
+});
 
 // ─── CostMeter ────────────────────────────────────────────────────────────────
-function CostMeter({ costs }) {
+const CostMeter = React.memo(function CostMeter({ costs }) {
   return (
     <div style={card}>
       <div style={{ color: colors.gold, fontSize: 12, marginBottom: 8 }}>💰 COÛTS TOKENS</div>
@@ -133,10 +137,10 @@ function CostMeter({ costs }) {
       </div>
     </div>
   );
-}
+});
 
 // ─── GodButton ────────────────────────────────────────────────────────────────
-function GodButton() {
+const GodButton = React.memo(function GodButton() {
   const kill = async () => {
     await fetch(`${API}/api/control`, {
       method: "POST",
@@ -188,10 +192,10 @@ function GodButton() {
       </button>
     </div>
   );
-}
+});
 
 // ─── TelegramConsole ─────────────────────────────────────────────────────────
-function TelegramConsole() {
+const TelegramConsole = React.memo(function TelegramConsole() {
   const [input, setInput] = useState("");
   const [log, setLog] = useState([]);
 
@@ -253,7 +257,7 @@ function TelegramConsole() {
       </div>
     </div>
   );
-}
+});
 
 // ─── LogStream ────────────────────────────────────────────────────────────────
 function LogStream({ logs }) {
@@ -264,7 +268,7 @@ function LogStream({ logs }) {
     <div style={{ ...card, flex: 1 }}>
       <div style={{ color: colors.gold, fontSize: 12, marginBottom: 8 }}>📜 LOGS TEMPS RÉEL</div>
       <div ref={ref} style={{ height: 150, overflowY: "auto", fontSize: 10, fontFamily: "monospace" }}>
-        {logs.slice(-50).map((l, i) => (
+        {logs.slice(-100).map((l, i) => (
           <div key={i} style={{ color: l.includes("ERROR") ? colors.red : colors.muted, padding: "1px 0" }}>
             {l}
           </div>
@@ -275,7 +279,7 @@ function LogStream({ logs }) {
 }
 
 // ─── App ──────────────────────────────────────────────────────────────────────
-export default function App() {
+function App() {
   const [status, setStatus] = useState({});
   const [missions, setMissions] = useState([]);
   const [costs, setCosts] = useState({ daily: 0, total: 0 });
@@ -351,3 +355,5 @@ export default function App() {
     </div>
   );
 }
+
+export default React.memo(App);

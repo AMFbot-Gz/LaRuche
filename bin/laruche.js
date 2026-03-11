@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 🐝 LaRuche CLI v3.0
+ * 🐝 LaRuche CLI v3.2
  * The sovereign AI swarm for your machine.
  * Usage: laruche <command> [options]
  */
@@ -17,7 +17,7 @@ import readline from "readline";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
-const VERSION = "3.0.0";
+const VERSION = "3.2.0";
 
 // ─── Banner ───────────────────────────────────────────────────────────────────
 const BANNER = boxen(
@@ -74,8 +74,9 @@ program
 program
   .command("start")
   .description("Démarrer l'essaim LaRuche (queen + watcher + dashboard)")
-  .option("--no-hud", "Désactiver le HUD Electron")
-  .option("--dev", "Mode développement (logs détaillés)")
+  .option("--headless", "Mode VPS: core + MCP seulement (sans HUD/Dashboard)")
+  .option("--full", "Mode desktop: tout inclus (HUD Electron)")
+  .option("--dev", "Mode développement")
   .action(async (opts) => {
     console.log("\n" + BANNER + "\n");
 
@@ -99,24 +100,18 @@ program
 
     const startSpinner = ora(chalk.dim("Démarrage de l'essaim...")).start();
 
+    const runMode = opts.headless ? "headless" : opts.full ? "full" : "balanced";
+    startSpinner.text = chalk.dim(`Mode ${runMode} — démarrage...`);
+
     try {
-      const ecosystem = join(ROOT, "ecosystem.config.js");
-      const apps = ["laruche-queen", "laruche-watcher", "laruche-dashboard"];
-      if (opts.hud !== false) apps.push("laruche-hud");
-
-      await execa("npx", ["pm2", "start", ecosystem, "--env", opts.dev ? "development" : "production"], {
-        cwd: ROOT,
-        reject: false,
-      });
-
-      startSpinner.succeed(chalk.green("LaRuche démarrée !"));
-
+      const { startMode } = await import("../src/modes.js");
+      await startMode(runMode, opts.dev ? "development" : "production");
+      startSpinner.succeed(chalk.green(`LaRuche démarrée [${runMode}]`));
       console.log();
       console.log(boxen(
-        chalk.white.bold("🐝 LaRuche opérationnelle\n\n") +
-        chalk.dim("Dashboard: ") + chalk.cyan("http://localhost:8080") + "\n" +
-        chalk.dim("HUD:       ") + chalk.cyan("Ctrl+Shift+H") + "\n" +
-        chalk.dim("Telegram:  ") + chalk.cyan("Envoyez /status") + "\n\n" +
+        chalk.white.bold(`🐝 LaRuche ${runMode}\n\n`) +
+        (runMode !== "headless" ? chalk.dim("Dashboard: ") + chalk.cyan("http://localhost:8080") + "\n" : "") +
+        chalk.dim("Telegram:  ") + chalk.cyan("Envoyez /start") + "\n\n" +
         chalk.dim("Arrêter:   ") + chalk.yellow("laruche stop"),
         { padding: 1, borderStyle: "round", borderColor: "yellow" }
       ));
@@ -237,79 +232,101 @@ program
 program
   .command("doctor")
   .description("Diagnostic complet du système")
-  .action(async () => {
-    console.log(chalk.hex("#F5A623").bold("\n🩺 LaRuche Doctor\n"));
-
+  .option("--quiet", "Silent mode — exit code only")
+  .action(async (opts) => {
     const checks = [];
+    const quiet = opts.quiet;
 
     // Node.js
     const nodeVersion = process.version;
     const nodeMajor = parseInt(nodeVersion.slice(1));
-    checks.push({
-      name: "Node.js",
-      ok: nodeMajor >= 20,
-      detail: nodeVersion,
-      fix: nodeMajor < 20 ? "Installez Node.js 20+" : null,
-    });
+    checks.push({ name: "Node.js", ok: nodeMajor >= 20, detail: nodeVersion, fix: nodeMajor < 20 ? "Install Node.js 20+ from nodejs.org" : null });
 
     // Python
     try {
       const { stdout } = await execa("python3", ["--version"], { reject: false });
       checks.push({ name: "Python 3", ok: true, detail: stdout.trim() });
     } catch {
-      checks.push({ name: "Python 3", ok: false, detail: "Non trouvé", fix: "Installez Python 3.11+" });
+      checks.push({ name: "Python 3", ok: false, detail: "Not found", fix: "brew install python@3.11" });
     }
 
     // Ollama
     const ollama = await checkOllama();
-    checks.push({
-      name: "Ollama",
-      ok: ollama.ok,
-      detail: ollama.ok ? `${ollama.models.length} modèle(s)` : "Non disponible",
-      fix: ollama.ok ? null : "Lancez: ollama serve",
-    });
+    checks.push({ name: "Ollama", ok: ollama.ok, detail: ollama.ok ? `${ollama.models.length} model(s)` : "Offline", fix: !ollama.ok ? "Run: ollama serve" : null });
+
+    // Ollama model
+    if (ollama.ok) {
+      const hasWorker = ollama.models.some(m => m.includes("llama3.2") || m.includes("llama3"));
+      checks.push({ name: "Worker model", ok: hasWorker, detail: hasWorker ? "Found" : "Missing", fix: !hasWorker ? "ollama pull llama3.2:3b" : null });
+    }
 
     // .env
     const envOk = existsSync(join(ROOT, ".env"));
-    checks.push({
-      name: ".env",
-      ok: envOk,
-      detail: envOk ? "Présent" : "Manquant",
-      fix: !envOk ? "Lancez: laruche init" : null,
-    });
+    checks.push({ name: ".env file", ok: envOk, detail: envOk ? "Present" : "Missing", fix: !envOk ? "laruche init" : null });
+
+    // Telegram token
+    if (envOk) {
+      const { isConfigured } = await import("../src/config.js");
+      const configured = isConfigured();
+      checks.push({ name: "Telegram config", ok: configured, detail: configured ? "Configured" : "Token/ID missing", fix: !configured ? "Edit .env: set TELEGRAM_BOT_TOKEN + ADMIN_TELEGRAM_ID" : null });
+    }
 
     // PM2
     try {
       await execa("npx", ["pm2", "--version"], { reject: false });
-      checks.push({ name: "PM2", ok: true, detail: "Disponible" });
+      checks.push({ name: "PM2", ok: true, detail: "Available" });
     } catch {
-      checks.push({ name: "PM2", ok: false, detail: "Non trouvé", fix: "npm install -g pm2" });
+      checks.push({ name: "PM2", ok: false, detail: "Not found", fix: "npm install -g pm2" });
     }
+
+    // Port 9001 (HUD)
+    try {
+      const { createServer } = await import("net");
+      await new Promise((res, rej) => {
+        const s = createServer();
+        s.once("error", (e) => { e.code === "EADDRINUSE" ? res(false) : res(true); });
+        s.once("listening", () => { s.close(); res(true); });
+        s.listen(9001, "127.0.0.1");
+      }).then(free => {
+        checks.push({ name: "Port 9001 (HUD)", ok: true, detail: free ? "Available" : "In use (HUD running)" });
+      });
+    } catch { checks.push({ name: "Port 9001 (HUD)", ok: true, detail: "Unknown" }); }
 
     // rsync
     try {
       await execa("rsync", ["--version"], { reject: false });
-      checks.push({ name: "rsync", ok: true, detail: "Disponible" });
+      checks.push({ name: "rsync", ok: true, detail: "Available" });
     } catch {
-      checks.push({ name: "rsync", ok: false, detail: "Non trouvé" });
+      checks.push({ name: "rsync", ok: false, detail: "Not found", fix: "brew install rsync" });
     }
 
-    // Affichage
+    if (!quiet) {
+      console.log(chalk.hex("#F5A623").bold("\n🩺 LaRuche Doctor\n"));
+    }
+
+    let allOk = true;
     checks.forEach((c) => {
-      const icon = c.ok ? chalk.green("✓") : chalk.red("✗");
-      const name = c.name.padEnd(15);
-      const detail = chalk.dim(c.detail);
-      const fix = c.fix ? chalk.yellow(` → ${c.fix}`) : "";
-      console.log(`  ${icon} ${name} ${detail}${fix}`);
+      if (!c.ok) allOk = false;
+      if (!quiet) {
+        const icon = c.ok ? chalk.green("✓") : chalk.red("✗");
+        const name = c.name.padEnd(22);
+        const detail = chalk.dim(c.detail);
+        const fix = c.fix ? chalk.yellow(`  → ${c.fix}`) : "";
+        console.log(`  ${icon} ${name} ${detail}${fix}`);
+      }
     });
 
-    const allOk = checks.every((c) => c.ok);
-    console.log();
-    if (allOk) {
-      console.log(chalk.green("  ✅ Tout est prêt. Lancez: laruche start\n"));
-    } else {
-      console.log(chalk.yellow("  ⚠ Corrigez les erreurs ci-dessus puis relancez: laruche doctor\n"));
+    if (!quiet) {
+      console.log();
+      if (allOk) {
+        console.log(chalk.green("  ✅ Everything looks good. Run: laruche start\n"));
+      } else {
+        const failed = checks.filter(c => !c.ok).length;
+        console.log(chalk.yellow(`  ⚠ ${failed} issue(s) found. Fix them then run: laruche doctor\n`));
+      }
     }
+
+    if (!allOk) process.exit(1);
   });
 
 // ─── laruche skill ────────────────────────────────────────────────────────────
@@ -604,6 +621,71 @@ program
     } catch {
       console.log(chalk.dim("  Aucune session trouvée. Lancez: laruche agent devops 'votre tâche'\n"));
     }
+    console.log();
+  });
+
+// ─── laruche dev ──────────────────────────────────────────────────────────────
+program
+  .command("dev")
+  .description("Mode développement — lance queen_oss.js directement (sans PM2)")
+  .action(async () => {
+    console.log(chalk.hex("#F5A623").bold("\n🔧 LaRuche Dev Mode\n"));
+    console.log(chalk.dim("queen_oss.js — logs verbose — Ctrl+C pour arrêter\n"));
+
+    const { spawn } = await import("child_process");
+    const child = spawn("node", ["src/queen_oss.js"], {
+      cwd: ROOT,
+      env: { ...process.env, NODE_ENV: "development", LOG_LEVEL: "debug", LARUCHE_MODE: "balanced" },
+      stdio: "inherit",
+    });
+
+    process.on("SIGINT", () => { child.kill("SIGTERM"); process.exit(0); });
+    child.on("exit", (code) => process.exit(code || 0));
+  });
+
+// ─── laruche help ─────────────────────────────────────────────────────────────
+program
+  .command("help")
+  .description("Aide détaillée avec exemples")
+  .action(() => {
+    console.log("\n" + BANNER + "\n");
+    console.log(chalk.hex("#F5A623").bold("Commandes principales:\n"));
+
+    const cmds = [
+      ["laruche init",              "Configurer les API keys et le bot Telegram"],
+      ["laruche start",             "Démarrer l'essaim (mode balanced par défaut)"],
+      ["laruche start --headless",  "Démarrer en mode VPS (core + MCP seulement)"],
+      ["laruche start --full",      "Démarrer en mode desktop (HUD Electron inclus)"],
+      ["laruche dev",               "Lancer queen_oss.js directement (debug)"],
+      ["laruche stop",              "Arrêter tous les processus"],
+      ["laruche status",            "État du système et des agents"],
+      ["laruche doctor",            "Diagnostic complet"],
+      ["laruche doctor --quiet",    "Diagnostic silencieux (exit code uniquement)"],
+      ["laruche logs",              "Logs en temps réel (PM2)"],
+      ["laruche models",            "Voir/configurer les modèles Ollama"],
+      ["laruche agent devops <t>",  "Lancer un agent sur une tâche"],
+      ["laruche session",           "Lister les sessions agent"],
+      ["laruche skill list",        "Lister les skills disponibles"],
+      ["laruche skill create <d>",  "Créer un skill via IA"],
+      ["laruche hive",              "Marketplace skills communauté"],
+      ["laruche send <msg>",        "Envoyer une commande à l'essaim"],
+      ["laruche rollback",          "Lister / restaurer un snapshot"],
+    ];
+
+    cmds.forEach(([cmd, desc]) => {
+      console.log(`  ${chalk.cyan(cmd.padEnd(36))} ${chalk.dim(desc)}`);
+    });
+
+    console.log(chalk.hex("#F5A623").bold("\nExemples:\n"));
+    const examples = [
+      "laruche start --headless",
+      "laruche start --full --dev",
+      "laruche agent devops 'analyse les logs PM2 des 24 dernières heures'",
+      "laruche models --set-role architect=qwen3-coder:14b",
+      "laruche doctor --quiet && echo OK",
+      "LARUCHE_MODE=high laruche start",
+    ];
+    examples.forEach(ex => console.log(`  ${chalk.yellow("$")} ${ex}`));
     console.log();
   });
 

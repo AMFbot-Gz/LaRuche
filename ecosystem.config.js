@@ -1,40 +1,76 @@
+/**
+ * ecosystem.config.js — PM2 Process Manager Config
+ *
+ * Modes:
+ *   laruche start --headless → queen + watcher only
+ *   laruche start            → + dashboard
+ *   laruche start --full     → + HUD Electron
+ *
+ * LARUCHE_MODE=low|balanced|high → performance profile
+ */
+
+const MODE = process.env.LARUCHE_MODE || "balanced";
+
+const memoryLimits = {
+  low:      { queen: "200M", hud: "100M", dashboard: "100M", watcher: "30M" },
+  balanced: { queen: "500M", hud: "150M", dashboard: "200M", watcher: "50M" },
+  high:     { queen: "1G",   hud: "250M", dashboard: "400M", watcher: "50M" },
+};
+
+const mem = memoryLimits[MODE] || memoryLimits.balanced;
+
 export default {
   apps: [
+    // ── Core (always started) ───────────────────────────────────────────────
     {
       name: "laruche-queen",
-      script: "src/queen.js",
+      script: "src/queen_oss.js",            // ← canonical entry point
       watch: false,
       restart_delay: 3000,
-      max_memory_restart: "500M",
+      max_memory_restart: mem.queen,
       env_production: {
         NODE_ENV: "production",
         PORT: 3000,
+        LARUCHE_MODE: MODE,
+      },
+      env_development: {
+        NODE_ENV: "development",
+        PORT: 3000,
+        LARUCHE_MODE: "balanced",
+        LOG_LEVEL: "debug",
       },
       log_file: ".laruche/logs/queen.log",
       error_file: ".laruche/logs/queen-error.log",
       log_date_format: "YYYY-MM-DD HH:mm:ss",
-    },
-    {
-      name: "laruche-hud",
-      script: "hud/main.js",
-      interpreter: "electron",
-      max_memory_restart: "150M",
-      log_file: ".laruche/logs/hud.log",
-      error_file: ".laruche/logs/hud-error.log",
+      merge_logs: true,
     },
     {
       name: "laruche-watcher",
       script: "src/watcher.js",
-      max_memory_restart: "50M",
+      max_memory_restart: mem.watcher,
       log_file: ".laruche/logs/watcher.log",
       error_file: ".laruche/logs/watcher-error.log",
+      merge_logs: true,
     },
+    // ── Dashboard (started unless --headless) ───────────────────────────────
     {
       name: "laruche-dashboard",
       script: "dashboard/server.js",
-      max_memory_restart: "200M",
+      max_memory_restart: mem.dashboard,
+      env_production: { NODE_ENV: "production", LARUCHE_MODE: MODE },
       log_file: ".laruche/logs/dashboard.log",
       error_file: ".laruche/logs/dashboard-error.log",
+      merge_logs: true,
+    },
+    // ── HUD Electron (started only with --full) ─────────────────────────────
+    {
+      name: "laruche-hud",
+      script: "hud/main.js",
+      interpreter: "electron",
+      max_memory_restart: mem.hud,
+      log_file: ".laruche/logs/hud.log",
+      error_file: ".laruche/logs/hud-error.log",
+      merge_logs: true,
     },
   ],
 };

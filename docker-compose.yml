@@ -1,0 +1,75 @@
+# LaRuche docker-compose — headless mode (core + dashboard, no HUD)
+# Usage:
+#   docker-compose up -d          # start
+#   docker-compose logs -f        # follow logs
+#   docker-compose down           # stop
+#
+# HUD (Electron) not included — requires display.
+# For desktop HUD, use: laruche start --full
+
+version: "3.9"
+
+services:
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: laruche-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  queen:
+    image: node:20-alpine
+    container_name: laruche-queen
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=production
+      - LARUCHE_MODE=${LARUCHE_MODE:-balanced}
+      - OLLAMA_HOST=http://ollama:11434
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - ADMIN_TELEGRAM_ID=${ADMIN_TELEGRAM_ID}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    command: sh -c "npm install --prefer-offline && node src/queen_oss.js"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health').catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dashboard:
+    image: node:20-alpine
+    container_name: laruche-dashboard
+    working_dir: /app
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=production
+      - LARUCHE_MODE=${LARUCHE_MODE:-balanced}
+    command: node dashboard/server.js
+    ports:
+      - "8080:8080"
+    depends_on:
+      - queen
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+
+# ─── Minimal model pull on first start ───────────────────────────────────────
+# Run once after first `docker-compose up -d`:
+#   docker exec laruche-ollama ollama pull llama3.2:3b

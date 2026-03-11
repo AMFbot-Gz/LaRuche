@@ -5,6 +5,26 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 
+// Throttle HUD events to avoid excessive re-renders
+const THROTTLE_MS = {
+  low: 500,
+  balanced: 200,
+  high: 33,
+}[window.__LARUCHE_MODE__ || "balanced"] || 200;
+
+function useThrottledState(initial, ms = THROTTLE_MS) {
+  const [state, setState] = React.useState(initial);
+  const lastUpdate = React.useRef(0);
+  const throttledSet = React.useCallback((value) => {
+    const now = Date.now();
+    if (now - lastUpdate.current >= ms) {
+      lastUpdate.current = now;
+      setState(value);
+    }
+  }, [ms]);
+  return [state, throttledSet, setState];
+}
+
 // ─── Styles inline (pas de CSS externe pour le HUD transparent) ───────────────
 const styles = {
   thoughtStream: {
@@ -102,7 +122,7 @@ const styles = {
 };
 
 // ─── GhostCursor ──────────────────────────────────────────────────────────────
-function GhostCursor({ x, y, label, visible }) {
+const GhostCursor = React.memo(function GhostCursor({ x, y, label, visible }) {
   if (!visible) return null;
   return (
     <div style={{ ...styles.ghostCursor, left: x - 20, top: y - 20 }}>
@@ -139,10 +159,10 @@ function GhostCursor({ x, y, label, visible }) {
       )}
     </div>
   );
-}
+});
 
 // ─── HITLModal ────────────────────────────────────────────────────────────────
-function HITLModal({ event, onResponse }) {
+const HITLModal = React.memo(function HITLModal({ event, onResponse }) {
   const [countdown, setCountdown] = useState(60);
 
   useEffect(() => {
@@ -201,7 +221,7 @@ function HITLModal({ event, onResponse }) {
       </div>
     </div>
   );
-}
+});
 
 // ─── App Principal ────────────────────────────────────────────────────────────
 export default function App() {
@@ -228,7 +248,7 @@ export default function App() {
       switch (event.type) {
         case "thinking":
           setStatus("THINKING");
-          setThoughts((prev) => [...prev.slice(-20), `[${event.agent}] ${event.thought}`]);
+          setThoughts((prev) => [...prev.slice(-10), `[${event.agent}] ${event.thought}`]);
           break;
 
         case "mission_start":
