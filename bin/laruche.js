@@ -515,4 +515,96 @@ program
     console.log(chalk.dim(`\n  Pour forcer un modèle: laruche models --set-role architect=qwen3-coder:14b\n`));
   });
 
+// ─── laruche agent ────────────────────────────────────────────────────────────
+program
+  .command("agent <name> [task...]")
+  .description("Lancer un agent (operator | devops | builder)")
+  .option("-s, --session <id>", "Reprendre une session existante")
+  .option("--no-stream", "Désactiver le streaming")
+  .action(async (name, taskParts, opts) => {
+    const task = taskParts?.join(" ") || "";
+
+    if (!task) {
+      console.log(chalk.hex("#F5A623").bold("\n🤖 Agents LaRuche\n"));
+      const agents = ["operator", "devops", "builder"];
+      agents.forEach(a => console.log(`  ${chalk.cyan("●")} ${a}`));
+      console.log(chalk.dim("\n  Usage: laruche agent devops 'analyse les logs PM2'\n"));
+      return;
+    }
+
+    console.log(chalk.hex("#F5A623").bold(`\n🤖 Agent: ${name}\n`));
+    console.log(chalk.dim(`Task: ${task}\n`));
+
+    const spinner = ora(chalk.dim(`Agent ${name} en cours...`)).start();
+
+    try {
+      const { runAgent } = await import("../src/agents/agentBridge.js");
+
+      let buffer = "";
+      const result = await runAgent({
+        agentName: name,
+        userInput: task,
+        sessionId: opts.session,
+        onToken: (t) => {
+          spinner.stop();
+          process.stdout.write(t);
+          buffer += t;
+        },
+        onToolCall: (tool, args) => {
+          if (!buffer) spinner.text = chalk.dim(`[${tool}] en cours...`);
+          else console.log(chalk.dim(`\n⚙️  ${tool}(${JSON.stringify(args).slice(0, 60)})`));
+        },
+      });
+
+      if (buffer) console.log(); // newline after stream
+      spinner.succeed(chalk.green(`Terminé — ${result.iterations} itérations, ${result.tool_calls_count} outils`));
+      console.log(chalk.dim(`Session: ${result.sessionId}\n`));
+
+    } catch (e) {
+      spinner.fail(chalk.red(`Erreur: ${e.message}`));
+      process.exit(1);
+    }
+  });
+
+// ─── laruche session ──────────────────────────────────────────────────────────
+program
+  .command("session [agent]")
+  .description("Lister ou reprendre des sessions agent")
+  .action(async (agentName) => {
+    const { readdirSync, readFileSync, statSync } = await import("fs");
+    const { join: pathJoin } = await import("path");
+    const sessionsDir = pathJoin(process.cwd(), "workspace/sessions");
+
+    console.log(chalk.hex("#F5A623").bold("\n📋 Sessions LaRuche\n"));
+
+    try {
+      const agents = agentName ? [agentName] : readdirSync(sessionsDir);
+      for (const agent of agents) {
+        const agentDir = pathJoin(sessionsDir, agent);
+        try {
+          const files = readdirSync(agentDir)
+            .filter(f => f.endsWith(".json"))
+            .map(f => {
+              const data = JSON.parse(readFileSync(pathJoin(agentDir, f), "utf-8"));
+              return { file: f, ...data };
+            })
+            .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+            .slice(0, 5);
+
+          if (files.length > 0) {
+            console.log(chalk.bold(`  ${agent}:`));
+            files.forEach(s => {
+              const status = s.status === "completed" ? chalk.green("✓") : s.status === "error" ? chalk.red("✗") : chalk.yellow("~");
+              const date = new Date(s.updated_at).toLocaleString("fr-FR");
+              console.log(`    ${status} ${s.id.slice(0, 30).padEnd(32)} ${chalk.dim(date)}`);
+            });
+          }
+        } catch { /* skip */ }
+      }
+    } catch {
+      console.log(chalk.dim("  Aucune session trouvée. Lancez: laruche agent devops 'votre tâche'\n"));
+    }
+    console.log();
+  });
+
 program.parse();

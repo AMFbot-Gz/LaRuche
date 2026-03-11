@@ -1,0 +1,54 @@
+# LaRuche Cron Jobs
+# Format: standard cron expression or human-readable interval
+# Agent: which agent executes this job
+# Skill: optional skill to activate
+
+version: "1.0"
+
+jobs:
+  - id: daily_cleanup
+    name: "Nettoyage quotidien"
+    schedule: "0 3 * * *"       # Every day at 3:00 AM
+    agent: devops
+    skill: null
+    action: |
+      Purge .laruche/temp/
+      Rotate logs older than 24h
+      Purge rollback snapshots older than 7 days
+      GC RAM if heap > 400MB
+    enabled: true
+
+  - id: hourly_health
+    name: "Health check horaire"
+    schedule: "0 * * * *"       # Every hour
+    agent: devops
+    skill: devops_logs
+    action: |
+      Check PM2 process status
+      Verify Ollama is responsive
+      Check disk usage > 90%
+      Alert via Telegram if any check fails
+    enabled: true
+
+  - id: weekly_memory_consolidation
+    name: "Consolidation mémoire hebdo"
+    schedule: "0 2 * * 0"       # Every Sunday at 2:00 AM
+    agent: builder
+    skill: null
+    action: |
+      Summarize workspace/memory/ entries older than 7 days
+      Extract top patterns from vault ChromaDB
+      Update workspace/memory/MEMORY.md with new learned rules
+      Compress old session files in workspace/sessions/
+    enabled: false
+
+  - id: regression_tests
+    name: "Tests de régression nocturnes"
+    schedule: "0 2 * * *"       # Every day at 2:00 AM
+    agent: devops
+    skill: null
+    action: |
+      Run node test/smoke.js
+      Alert Telegram if any test fails
+      Store results in .laruche/regression-tests/
+    enabled: true

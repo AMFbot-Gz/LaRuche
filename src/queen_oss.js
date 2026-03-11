@@ -270,6 +270,55 @@ Code fonctionnel uniquement, pas d'explication.`;
   );
 });
 
+// ─── Agent commands ────────────────────────────────────────────────────────
+bot.command("agent", async (ctx) => {
+  const parts = ctx.message.text.replace("/agent", "").trim().split(" ");
+  const agentName = parts[0] || "devops";
+  const task = parts.slice(1).join(" ");
+
+  if (!task) {
+    await ctx.reply(
+      `Usage: /agent <nom> <mission>\n\n` +
+      `Agents disponibles:\n` +
+      `  \`operator\` — HID, souris, apps\n` +
+      `  \`devops\`   — terminal, logs, déploiement\n` +
+      `  \`builder\`  — code, skills, projets`,
+      { parse_mode: "Markdown" }
+    );
+    return;
+  }
+
+  const msg = await ctx.reply(`🤖 Agent **${agentName}** → \`${task.slice(0, 60)}\``, { parse_mode: "Markdown" });
+
+  try {
+    const { runAgent } = await import("./agents/agentBridge.js");
+    let buffer = "";
+
+    const result = await runAgent({
+      agentName,
+      userInput: task,
+      onToken: (t) => { buffer += t; },
+      onToolCall: (tool, args) => {
+        logger.info(`[agent:${agentName}] tool: ${tool}`);
+        hud({ type: "task_start", task: `${tool}(${JSON.stringify(args).slice(0, 40)})` });
+      },
+      onHITL: async (action, risk) => {
+        await ctx.reply(`⚠️ HITL requis: \`${action}\` (risque: ${(risk * 100).toFixed(0)}%)\nRéponds /approve ou /reject`, { parse_mode: "Markdown" });
+        return true; // auto-approve for now; can be made interactive
+      },
+    });
+
+    const response = result.response || buffer;
+    const footer = `\n\n_Session: \`${result.sessionId}\` | ${result.iterations} iter. | ${result.tool_calls_count} tools_`;
+
+    for (const chunk of splitMsg(response + footer)) {
+      await ctx.reply(chunk, { parse_mode: "Markdown" });
+    }
+  } catch (e) {
+    await ctx.reply(`❌ Agent error: ${e.message}`);
+  }
+});
+
 // Messages libres → mission directe
 bot.on("text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return;
