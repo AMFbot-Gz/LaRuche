@@ -6,7 +6,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import Database from "better-sqlite3";
+import { initDb, run as dbRun } from "./db.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -17,9 +17,7 @@ const SKILLS_DIR = join(ROOT, "skills");
 const REGISTRY_PATH = join(ROOT, ".laruche/registry.json");
 const PROFILE_PATH = join(ROOT, ".laruche/patron-profile.json");
 
-const db = new Database(join(ROOT, ".laruche/shadow-errors.db"));
-
-db.exec(`
+await initDb(`
   CREATE TABLE IF NOT EXISTS skill_versions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     skill_name TEXT NOT NULL,
@@ -115,8 +113,7 @@ Code uniquement, pas d'explication.`;
   }
   saveRegistry(registry);
 
-  db.prepare("INSERT INTO skill_versions (skill_name, version, timestamp, patch_reason) VALUES (?, ?, ?, ?)")
-    .run(skillName, "1.0.0", new Date().toISOString(), "Initial creation");
+  await dbRun("INSERT INTO skill_versions (skill_name, version, timestamp, patch_reason) VALUES (?, ?, ?, ?)", [skillName, "1.0.0", new Date().toISOString(), "Initial creation"]);
 
   return { skillName, path: skillDir, version: "1.0.0" };
 }
@@ -171,8 +168,7 @@ export async function evolveSkill(skillName, bugReport) {
   }
 
   // 6. Log DB
-  db.prepare("INSERT INTO skill_versions (skill_name, version, timestamp, patch_reason) VALUES (?, ?, ?, ?)")
-    .run(skillName, newVersion, new Date().toISOString(), analysis.cause);
+  await dbRun("INSERT INTO skill_versions (skill_name, version, timestamp, patch_reason) VALUES (?, ?, ?, ?)", [skillName, newVersion, new Date().toISOString(), analysis.cause]);
 
   // 7. Mise à jour registre
   const registry = loadRegistry();

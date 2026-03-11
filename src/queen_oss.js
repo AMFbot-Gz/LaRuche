@@ -288,38 +288,28 @@ logger.info("╚═════════════════════�
 
 await printRoles();
 
-// Voler la session Telegram — force le timeout=0 pour couper le long-poll précédent
-async function stealSession() {
-  try {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    // Appel getUpdates avec timeout=0 coupe immédiatement le long-poll concurrent
-    await fetch(`https://api.telegram.org/bot${token}/getUpdates?timeout=0&offset=-1`);
-    await new Promise(r => setTimeout(r, 2000)); // 2s pour que Telegram libère
-    logger.info("🔑 Session Telegram libérée");
-  } catch {}
-}
+// bot.launch() en Telegraf 4.x est une boucle infinie — ne jamais await
+// On démarre en arrière-plan et on gère les erreurs séparément
+const token = process.env.TELEGRAM_BOT_TOKEN;
 
-// Lancement avec vol de session + retry sur 409
-async function launchWithRetry(maxAttempts = 3, delayMs = 5000) {
-  await stealSession();
-  for (let i = 1; i <= maxAttempts; i++) {
-    try {
-      await bot.launch({ dropPendingUpdates: true });
-      logger.info("🤖 Bot Telegram OSS actif");
-      return;
-    } catch (e) {
-      if (e.response?.error_code === 409 && i < maxAttempts) {
-        logger.warn(`409 Conflict — retry ${i}/${maxAttempts} dans ${delayMs / 1000}s...`);
-        await stealSession();
-        await new Promise(r => setTimeout(r, delayMs));
-      } else {
-        throw e;
-      }
-    }
+// Vol de session préventif
+try {
+  await fetch(`https://api.telegram.org/bot${token}/getUpdates?timeout=0&offset=-1`);
+  await new Promise(r => setTimeout(r, 1500));
+  logger.info("🔑 Session Telegram libérée");
+} catch {}
+
+// Lancement non-bloquant
+bot.launch({ dropPendingUpdates: true }).catch((e) => {
+  if (e.response?.error_code === 409) {
+    logger.error("409 Conflict — un autre bot utilise ce token. Stopper le service concurrent.");
+  } else {
+    logger.error(`Erreur bot: ${e.message}`);
   }
-}
+  process.exit(1);
+});
 
-await launchWithRetry();
+logger.info("🤖 LaRuche OSS v3.1 — Bot Telegram actif ✅");
 
 // Pre-warm: déclencher auto-détection des rôles au démarrage (évite latence premier message)
 autoDetectRoles().then((roles) => {
