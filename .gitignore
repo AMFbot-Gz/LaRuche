@@ -33,3 +33,9 @@ Thumbs.db
 screenshots/
 *.png
 *.jpg
+
+# Coverage reports
+coverage/
+
+# Dossier projet imbriqué
+LaRuche/

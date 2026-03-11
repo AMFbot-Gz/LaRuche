@@ -1,0 +1,72 @@
+name: 🐛 Bug Report
+description: Signaler un bug dans LaRuche
+title: "[Bug] "
+labels: ["bug", "needs-triage"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de prendre le temps de signaler ce bug ! Plus vos informations sont précises, plus vite nous pouvons corriger.
+
+  - type: input
+    id: version
+    attributes:
+      label: Version de LaRuche
+      placeholder: "3.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Système d'exploitation
+      options:
+        - macOS
+        - Ubuntu / Debian
+        - Windows 10/11
+        - Autre Linux
+        - Autre
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Version Node.js
+      placeholder: "v20.11.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description du bug
+      placeholder: "Quand j'envoie /mission sur Telegram, le bot ne répond pas..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Lancer `laruche start`
+        2. Envoyer `/mission "test"` sur Telegram
+        3. Observer l'erreur dans les logs
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Comportement attendu
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs d'erreur
+      description: Collez les logs pertinents (`.laruche/logs/queen.log` ou `pm2 logs`)
+      render: shell

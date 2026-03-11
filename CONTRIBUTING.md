@@ -1,23 +1,64 @@
-# Contributing to LaRuche 🐝
+# 🐝 Contribuer à LaRuche
 
-Welcome to the Hive. Here's how to extend LaRuche.
+Bienvenue dans la Ruche Mondiale ! Chaque contribution compte.
 
-## Table of Contents
+## Table des matières
 
-1. [Add a MCP Server](#1-add-a-mcp-server)
-2. [Add a Workspace Skill](#2-add-a-workspace-skill)
-3. [Add an Agent Config](#3-add-an-agent-config)
-4. [Add a CLI Command](#4-add-a-cli-command)
-5. [Development Setup](#5-development-setup)
-6. [Code Conventions](#6-code-conventions)
+- [Code de conduite](#code-de-conduite)
+- [Environnement de développement](#environnement-de-développement)
+- [Ajouter un MCP Server](#ajouter-un-mcp-server)
+- [Ajouter un Skill](#ajouter-un-skill)
+- [Ajouter un Agent](#ajouter-un-agent)
+- [Ajouter une commande CLI](#ajouter-une-commande-cli)
+- [Conventions de code](#conventions-de-code)
+- [Soumettre une Pull Request](#soumettre-une-pull-request)
 
 ---
 
-## 1. Add a MCP Server
+## Code de conduite
 
-A MCP server exposes tools to agents via JSON-RPC over stdio.
+- **Bienveillant et inclusif** — Feedback constructif, pas d'attaques personnelles
+- **Patient** — Nous sommes tous à des niveaux différents
+- **Pédagogue** — Documentez, expliquez, aidez
 
-### Minimal template: `mcp_servers/my_tool_mcp.js`
+---
+
+## Environnement de développement
+
+```bash
+# Fork et clone
+git clone https://github.com/VOTRE_USERNAME/LaRuche.git
+cd LaRuche
+npm install
+cp .env.example .env
+# Renseigner TELEGRAM_BOT_TOKEN et ADMIN_TELEGRAM_ID
+
+# Mode développement (hot-reload, verbose)
+laruche dev
+
+# Ou directement
+node src/queen_oss.js
+
+# Tests smoke (22 tests)
+node test/smoke.js
+```
+
+### Structure des branches
+
+| Branche | Usage |
+|---------|-------|
+| `main` | Production stable |
+| `feat/*` | Nouvelles features |
+| `fix/*` | Corrections de bugs |
+| `docs/*` | Documentation uniquement |
+
+---
+
+## Ajouter un MCP Server
+
+Un MCP server expose des tools aux agents via JSON-RPC over stdio.
+
+### 1. Créer `mcp_servers/my_tool_mcp.js`
 
 ```javascript
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -27,10 +68,9 @@ import { z } from "zod";
 const server = new McpServer({ name: "laruche-my-tool", version: "1.0.0" });
 
 server.tool(
-  "myTool.doSomething",            // tool name (dot notation: category.action)
-  { input: z.string() },           // Zod schema for args
+  "myTool.doSomething",
+  { input: z.string() },
   async ({ input }) => {
-    // Your implementation
     const result = `processed: ${input}`;
     return {
       content: [{ type: "text", text: JSON.stringify({ success: true, result }) }]
@@ -42,24 +82,14 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 ```
 
-### Register in `config/agents.yml`
+### 2. Enregistrer dans `config/agents.yml`
 
 ```yaml
 tools:
-  myTool.doSomething:  { mcp: "mcp-my-tool", fn: "myTool.doSomething" }
+  myTool.doSomething: { mcp: "mcp-my-tool", fn: "myTool.doSomething" }
 ```
 
-### Register in `src/tools/toolRouter.ts`
-
-```typescript
-// Add to MCP_SERVERS:
-"mcp-my-tool": { command: "node", args: ["mcp_servers/my_tool_mcp.js"] },
-
-// Add to TOOL_MAP:
-"myTool.doSomething": { mcp: "mcp-my-tool", fn: "myTool.doSomething" },
-```
-
-### Allow for an agent in `config/agents.yml`
+### 3. Autoriser pour un agent
 
 ```yaml
 agents:
@@ -70,148 +100,101 @@ agents:
 
 ---
 
-## 2. Add a Workspace Skill
+## Ajouter un Skill
 
-Skills guide agent behavior for specific task types.
+Un skill guide le comportement de l'agent pour un type de tâche spécifique.
 
-### Create `workspace/skills/my_skill/SKILL.md`
+### `workspace/skills/my_skill/SKILL.md`
 
 ```markdown
 ---
 name: my_skill
 version: 1.0.0
-description: One sentence describing what this skill enables.
-tags: [tag1, tag2]
-scope: global                 # global | workspace | agent-specific
-agents: [devops, builder]     # which agents can use this
+description: Ce que fait ce skill en une phrase.
+tags: [automation, web]
+scope: global
+agents: [devops, builder]
 tools:
   - terminal.safe
-  - vault.store
-risk: low                     # low | medium | high
-cost: low                     # low | medium | high
+risk: low
 requires_hitl: false
 ---
 
 # Skill: My Skill
 
-What the agent should do when this skill is activated.
+Description détaillée du comportement attendu de l'agent.
 
-## Steps
+## Étapes
 
-1. Step one
-2. Step two
+1. Étape un
+2. Étape deux
 
-## Prompt Pattern
+## Gestion des erreurs
 
-\`\`\`
-Action: my_skill
-param: value
-\`\`\`
-
-## Error Handling
-
-What to do if steps fail.
+Que faire si les étapes échouent.
 ```
 
-### Optional: Add code `workspace/skills/my_skill/index.js`
-
-```javascript
-// Optional wrapper for complex skill logic
-export async function run(params) {
-  // Direct implementation
-  return { success: true, result: "..." };
-}
-```
-
-Skills are auto-loaded at agent session start — no restart needed.
+Les skills sont auto-chargés au démarrage — pas de redémarrage nécessaire.
 
 ---
 
-## 3. Add an Agent Config
+## Ajouter un Agent
 
-### Add soul file `workspace/agents/my_agent/AGENT.md`
+### `workspace/agents/my_agent/AGENT.md`
 
 ```markdown
 ---
 name: my_agent
 role: My Agent Role
-persona: Brief description of personality and behavior.
 model_primary: ollama://llama3.2:latest
 model_fallback: ollama://llama3.2:3b
-capabilities:
-  - my_capability
 tools_allowed:
   - terminal.safe
   - vault.*
-tools_denied:
-  - hid.*
 max_iterations: 10
-max_tool_calls: 30
-hitl_threshold: 0.5
-security_level: medium
 ---
 
 # My Agent
 
-Description of what this agent does.
-
-## Behavior Guidelines
-
-1. Guideline one
-2. Guideline two
+Description de ce que fait cet agent.
 ```
 
-### Register in `config/agents.yml`
+### Enregistrer dans `config/agents.yml`
 
 ```yaml
 agents:
   my_agent:
-    description: "My custom agent"
+    description: "Mon agent custom"
     soul: "workspace/agents/my_agent/AGENT.md"
     llm:
-      primary: { provider: ollama, model: "${OLLAMA_MODEL_WORKER:-llama3.2:latest}" }
-      fallback: { provider: ollama, model: "llama3.2:3b" }
-      temperature: 0.3
-      top_p: 0.9
-      streaming: true
-      timeout_ms: 45000
+      primary: { provider: ollama, model: "llama3.2:latest" }
     loop:
       max_iterations: 10
-      max_tool_calls: 30
-      hitl_threshold: 0.5
-      retry_on_error: 2
     tools_allowed: [terminal.safe, vault.*]
-    tools_denied: [hid.*]
-    memory:
-      load_global: true
-      load_agent_specific: true
-      max_entries: 15
-      use_vector_search: false
 ```
 
-Use it immediately:
-
 ```bash
-laruche agent my_agent "do something"
-# Telegram: /agent my_agent do something
+# Utilisation immédiate
+laruche agent my_agent "effectue cette tâche"
+# Telegram: /agent my_agent effectue cette tâche
 ```
 
 ---
 
-## 4. Add a CLI Command
+## Ajouter une commande CLI
 
-Edit `bin/laruche.js`, add before `program.parse()`:
+Editez `bin/laruche.js`, ajoutez avant `program.parse()` :
 
 ```javascript
 program
-  .command("my-command [args...]")
-  .description("What it does")
-  .option("--flag", "Description of flag")
+  .command("ma-commande [args...]")
+  .description("Ce que ça fait")
+  .option("--flag", "Description du flag")
   .action(async (args, opts) => {
-    const spinner = ora("Working...").start();
+    const spinner = ora("En cours...").start();
     try {
-      // implementation
-      spinner.succeed("Done!");
+      // implémentation
+      spinner.succeed("Terminé !");
     } catch (e) {
       spinner.fail(chalk.red(e.message));
     }
@@ -220,54 +203,56 @@ program
 
 ---
 
-## 5. Development Setup
+## Conventions de code
 
-```bash
-git clone https://github.com/AMFbot-Gz/LaRuche.git
-cd LaRuche
-npm install
-cp .env.example .env
-# Edit .env: set TELEGRAM_BOT_TOKEN and ADMIN_TELEGRAM_ID
-
-# Run in dev mode (verbose, no PM2)
-laruche dev
-
-# Or directly
-node src/queen_oss.js
-```
-
-**Optional TypeScript compilation:**
-
-```bash
-npm install --save-dev typescript tsx
-npx tsc --init
-npx tsx src/agents/agentLoop.ts   # test TS file
-```
-
-**Run tests:**
-
-```bash
-node test/smoke.js
-```
+- **ESM obligatoire** (`import/export`, jamais `require()`)
+- **async/await** partout, jamais `.then()` chaîné
+- **camelCase** pour JS/TS, **snake_case** pour les noms de skills
+- **Commentaires** : français pour l'UI/logs, anglais pour les identifiants code
+- **Secrets** : jamais en dur — toujours `process.env`
+- **Gestion d'erreurs** : jamais `catch() {}` vide — minimum `catch(e) { logger.error(e.message) }`
+- **Entry point** : `src/queen_oss.js` est canonique, `queen.js` est legacy
+- **Commits** : préfixes `feat:` / `fix:` / `perf:` / `docs:` / `test:`
 
 ---
 
-## 6. Code Conventions
+## Soumettre une Pull Request
 
-- **Language**: French for comments/UI, English for code identifiers
-- **Modules**: ES Modules (`import`/`export`), never CommonJS
-- **Async**: Always `async/await`, never `.then()` chains
-- **Error handling**: Never `catch() {}` — at minimum `catch(e) { logger.error(e.message) }`
-- **Config**: Always read from `.env` via `process.env`, never hardcode
-- **Secrets**: Never commit tokens or API keys
-- **Entry point**: `src/queen_oss.js` is the canonical entry — `queen.js` is legacy
-- **MCP tools**: Use `z.` Zod schemas for all tool arguments
-- **Commits**: `feat:` / `fix:` / `perf:` / `docs:` / `test:` prefix
+1. **Créer une branche** :
+   ```bash
+   git checkout -b feat/ma-super-feature
+   ```
 
-## PR Checklist
+2. **Développer** avec les conventions ci-dessus
 
-- [ ] `node test/smoke.js` passes (22/22)
-- [ ] No secrets in diff
-- [ ] New tool registered in `config/agents.yml` and `toolRouter.ts`
-- [ ] New skill has `SKILL.md` with complete frontmatter
-- [ ] `docs/ARCHITECTURE.md` updated if structure changed
+3. **Tester** :
+   ```bash
+   node test/smoke.js
+   # 22/22 tests doivent passer
+   ```
+
+4. **Commit** clair :
+   ```bash
+   git commit -m "feat: ajouter support multi-modèles pour le streaming"
+   ```
+
+5. **PR** vers `main` avec le template fourni
+
+### Checklist avant de soumettre
+
+- [ ] `node test/smoke.js` — 22/22 passent
+- [ ] Pas de secrets dans le diff (`git diff`)
+- [ ] Nouveau MCP enregistré dans `config/agents.yml`
+- [ ] Nouveau skill avec `SKILL.md` complet
+- [ ] `docs/ARCHITECTURE.md` mis à jour si la structure change
+
+---
+
+## Questions ?
+
+- 💬 [GitHub Discussions](https://github.com/AMFbot-Gz/LaRuche/discussions)
+- 🐛 [Issues](https://github.com/AMFbot-Gz/LaRuche/issues)
+
+---
+
+*🐝 Une abeille seule fait du miel. Un essaim change le monde.*

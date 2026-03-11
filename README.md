@@ -2,182 +2,306 @@
 
 # 🐝 LaRuche
 
-**Ghost Swarm Autonomous Agent**
+### Un essaim d'agents IA autonomes — 100% local, piloté depuis Telegram
 
-*Telegram → IA Swarm → Action physique*
+**Aucun cloud. Aucun abonnement. Votre machine, votre IA.**
 
-[![v3.2](https://img.shields.io/badge/version-3.2.0-F5A623?style=flat-square)](https://github.com/AMFbot-Gz/LaRuche/releases)
-[![Node 20+](https://img.shields.io/badge/node-20%2B-339933?style=flat-square&logo=node.js)](https://nodejs.org)
-[![MIT](https://img.shields.io/badge/license-MIT-7C3AED?style=flat-square)](LICENSE)
+[![CI](https://github.com/AMFbot-Gz/LaRuche/actions/workflows/ci.yml/badge.svg)](https://github.com/AMFbot-Gz/LaRuche/actions/workflows/ci.yml)
+[![Version](https://img.shields.io/badge/version-3.2.0-F5A623?style=flat-square)](https://github.com/AMFbot-Gz/LaRuche/releases)
+[![Node.js](https://img.shields.io/badge/Node.js-20+-339933?style=flat-square&logo=node.js)](https://nodejs.org)
+[![License: MIT](https://img.shields.io/badge/License-MIT-7C3AED?style=flat-square)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-22%2F22-22C55E?style=flat-square)](test/smoke.js)
+[![Ollama](https://img.shields.io/badge/Powered%20by-Ollama-FF6C37?style=flat-square)](https://ollama.com)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-F5A623?style=flat-square)](CONTRIBUTING.md)
 
-```
-Telegram → GLM-4.6 (stratégie) → qwen3-coder (code) → llama3.2 ×10 (exécution) → Action
-```
+<br/>
+
+[**Démarrage rapide**](#-démarrage-rapide) · [**Documentation**](docs/) · [**Contribuer**](CONTRIBUTING.md) · [**Discussions**](https://github.com/AMFbot-Gz/LaRuche/discussions) · [**Changelog**](CHANGELOG.md)
 
 </div>
 
 ---
 
-## Démarrage rapide — 3 étapes
+## Qu'est-ce que LaRuche ?
 
-### Étape 1 — Prérequis
+LaRuche est un **système multi-agents open source** qui transforme votre machine en infrastructure IA de production locale.
 
-| | Prérequis | Installation |
-|--|-----------|-------------|
-| Node.js 20+ | `node --version` | [nodejs.org](https://nodejs.org) |
-| Python 3.9+ | `python3 --version` | [python.org](https://python.org) |
-| Ollama | `ollama --version` | `curl -fsSL https://ollama.ai/install.sh \| sh` |
-| Bot Telegram | Token de @BotFather | `/newbot` sur Telegram |
+Une commande Telegram déclenche une cascade autonome :
 
-### Étape 2 — Installation one-click
+```
+/mission "Analyse mon projet et propose des optimisations"
+       │
+       ▼
+🧠 Stratège (GLM-4.6)     → Décompose en sous-tâches
+⚡ Architecte (Qwen3)     → Analyse le code  
+🔧 Worker (LLaMA 3.2)     → Exécute en parallèle
+👁 Vision (LLaVA)         → Valide visuellement
+       │
+       ▼
+✅ Résultat synthétisé → Telegram (< 10s)
+```
+
+**Vous recevez le résultat. Pas la complexité.**
+
+---
+
+## ✨ Pourquoi LaRuche ?
+
+| | LaRuche | ChatGPT Plus | GitHub Copilot |
+|--|---------|-------------|----------------|
+| **100% local** | ✅ | ❌ | ❌ |
+| **Coût mensuel** | 0€ | 20€/mois | 10€/mois |
+| **Données privées** | ✅ | ❌ | ❌ |
+| **Multi-agents spécialisés** | ✅ (4 rôles) | ❌ | ❌ |
+| **Pilotage Telegram** | ✅ | ❌ | ❌ |
+| **Extensible open source** | ✅ | ❌ | ⚠️ |
+
+---
+
+## 🚀 Démarrage rapide
+
+### Prérequis
+
+- [Node.js 20+](https://nodejs.org)
+- [Python 3.9+](https://python.org)
+- [Ollama](https://ollama.com) installé et lancé (`ollama serve`)
+- Un bot Telegram (créez-en un via [@BotFather](https://t.me/BotFather))
+
+### Installation en 3 étapes
 
 ```bash
+# 1. Cloner
 git clone https://github.com/AMFbot-Gz/LaRuche.git
 cd LaRuche
+
+# 2. Installer (script one-click)
 bash scripts/fast_install.sh
-```
 
-Ou pour vérifier les prérequis sans rien installer :
-```bash
-bash scripts/fast_install.sh --dry-run
-```
-
-### Étape 3 — Configuration
-
-```bash
-# Ouvrir .env et remplir les 2 champs obligatoires :
-#   TELEGRAM_BOT_TOKEN=  (depuis @BotFather)
-#   ADMIN_TELEGRAM_ID=   (depuis @userinfobot)
+# 3. Configurer (2 variables obligatoires)
+cp .env.example .env
 nano .env
+#   TELEGRAM_BOT_TOKEN=votre_token_botfather
+#   ADMIN_TELEGRAM_ID=votre_id_telegram
 ```
 
-### Lancer
+> 💡 Votre ID Telegram : envoyez `/start` à [@userinfobot](https://t.me/userinfobot)
+
+### Lancement
 
 ```bash
-laruche start           # Mode complet (queen + dashboard)
-laruche start --headless  # Sans dashboard (VPS/serveur)
+laruche start
+```
+
+```
+🐝 LaRuche v3.2 — 100% Local
+🤖 Bot Telegram actif ✅
+📺 Dashboard: http://localhost:8080
+```
+
+Envoyez `/start` à votre bot Telegram — c'est tout.
+
+---
+
+## 💬 Commandes Telegram
+
+| Commande | Description |
+|----------|-------------|
+| `/mission <texte>` | Lancer une mission multi-agents |
+| `/status` | État de tous les services |
+| `/models` | Modèles Ollama actifs par rôle |
+| `/skill <desc>` | Générer un skill par IA |
+| Message libre | Déclenche une mission directe |
+
+### Exemple de mission
+
+```
+/mission Liste les 10 fichiers JS les plus volumineux et propose des optimisations
+```
+
+```
+🧠 Analyse avec glm-4.6...
+📋 Plan d'exécution
+  • Lister et trier les fichiers JS par taille
+  • Analyser le contenu des 3 plus gros
+  • Proposer des optimisations concrètes
+
+⚡ [qwen3-coder] Tâche 2 terminée
+✅ Voici les résultats...
+⏱ 8.4s — Modèles: glm-4.6, qwen3-coder, llama3.2:3b
 ```
 
 ---
 
-## Première mission — test live
-
-1. Ouvre Telegram, envoie **`/start`** à ton bot
-2. Tu reçois la liste des modèles actifs et les commandes disponibles
-3. Envoie ce prompt :
-
-```
-liste les fichiers du projet LaRuche et dis-moi lequel est le plus gros
-```
-
-**Ce que tu observes :**
-- Le bot décompose la mission (GLM-4.6)
-- Exécute en parallèle (llama3.2)
-- Répond avec le résultat en ~5s
-- Le dashboard sur http://localhost:8080 affiche la mission en temps réel
-
----
-
-## Commandes CLI
-
-```bash
-laruche doctor          # Diagnostic complet (Ollama, Telegram, ports)
-laruche status          # État des processus PM2
-laruche models          # Modèles Ollama actifs par rôle
-laruche init            # Configuration interactive .env
-
-laruche start           # Lancer l'essaim (queen + dashboard)
-laruche start --headless  # Sans dashboard (VPS)
-laruche start --full    # + HUD Electron (desktop)
-laruche dev             # Mode développement (verbose, no PM2)
-
-laruche agent devops "analyse les logs"    # Agent spécialisé
-laruche agent builder "génère une API"
-laruche session                            # Historique sessions
-
-laruche skill list      # Skills disponibles
-laruche skill create "mon skill"  # Créer un skill via IA
-laruche hive            # Marketplace communauté
-
-laruche logs            # Logs temps réel
-laruche stop            # Arrêter l'essaim
-laruche rollback        # Restaurer un snapshot
-```
-
----
-
-## Architecture
+## 🏗️ Architecture
 
 ```
 Telegram / CLI
      │
      ▼
-src/queen_oss.js         ← Entry point principal
-     ├── model_router.js  ← Auto-sélection modèles Ollama
-     ├── agents/          ← Multi-agent loop (TypeScript)
-     ├── llm/provider.ts  ← Ollama + Anthropic + OpenAI + Kimi
-     └── tools/           ← Router → MCP servers
+src/queen_oss.js         ← Orchestrateur principal (Butterfly Loop)
+     ├── model_router.js  ← Auto-sélection modèles Ollama par rôle
+     ├── agents/          ← Multi-agent loop (TypeScript strict)
+     │    ├── agentLoop.ts
+     │    ├── agentBridge.js
+     │    └── intentPipeline.js
+     ├── llm/             ← Providers + fallback chain
+     │    ├── provider.ts  (Ollama → Anthropic → OpenAI → Kimi)
+     │    └── toolRouter.ts
+     └── tools/           ← Sandbox + MCP routing
           │
           ▼
 mcp_servers/             ← OS-control, terminal, vision, vault...
 hud/                     ← Ghost-Monitor Electron (overlay)
-dashboard/               ← LaRuche HQ (React :8080)
-workspace/               ← Memory, skills, agents (éditable)
-config/agents.yml        ← Providers + tools + agents config
+dashboard/               ← LaRuche HQ React (port 8080)
+workspace/               ← Skills, agents, mémoire (éditable)
+config/                  ← Providers, tools, agents YAML
 ```
 
-Voir [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) pour le schéma complet.
-
 ---
 
-## Modes de run
-
-| Mode | Commande | Processus | RAM |
-|------|---------|-----------|-----|
-| Headless | `laruche start --headless` | queen + watcher | ~100MB |
-| Balanced *(défaut)* | `laruche start` | + dashboard | ~300MB |
-| Full desktop | `laruche start --full` | + HUD Electron | ~450MB |
-| Dev | `laruche dev` | queen (live) | ~150MB |
-
----
-
-## Modèles Ollama
-
-LaRuche auto-détecte les modèles installés et les assigne par rôle :
+## 🖥️ CLI LaRuche
 
 ```bash
-laruche models         # Voir la configuration actuelle
+laruche start              # Démarrer l'essaim
+laruche start --headless   # Sans dashboard (VPS/serveur)
+laruche start --full       # Avec HUD Electron (desktop)
+laruche dev                # Mode développement (verbose, no PM2)
 
-# Changer un modèle
-laruche models --set-role worker=llama3.2:3b
+laruche status             # État de tous les processus
+laruche doctor             # Diagnostic complet
+laruche models             # Modèles Ollama actifs
 
-# Changer de profil de performance
-# Dans .env:
-LARUCHE_MODE=low       # Rapide, léger (1 modèle)
-LARUCHE_MODE=balanced  # Équilibré (défaut)
-LARUCHE_MODE=high      # Maximum (tous les modèles)
+laruche skill list         # Skills disponibles
+laruche skill create "description"  # Créer un skill par IA
+laruche hive               # Marketplace communauté
+
+laruche logs               # Logs temps réel
+laruche stop               # Arrêter l'essaim
+laruche rollback           # Restaurer un snapshot
 ```
 
 ---
 
-## Étendre LaRuche
+## 👁️ HUD & Dashboard
 
-- **Ajouter un MCP** → [CONTRIBUTING.md#1-add-a-mcp-server](CONTRIBUTING.md)
-- **Ajouter un skill** → `workspace/skills/mon_skill/SKILL.md`
-- **Ajouter un agent** → `config/agents.yml` + `workspace/agents/`
-- **Changer de provider LLM** → `.env` + `ANTHROPIC_ENABLED=true`
+**Dashboard Web** (`http://localhost:8080`)
+- StatusGrid — État de chaque service
+- MissionFeed — Historique missions en temps réel
+- CostMeter — Tokens consommés, coût USD estimé
+- TelegramConsole — Test commandes sans smartphone
+
+**HUD Electron** (overlay always-on-top)
+- MissionBar — Progression %, agent actif
+- ThoughtStream — Raisonnement IA en streaming
+- HITLModal — Approbation humaine avec countdown 60s
+- ThermalGauge — Température CPU/GPU
+
+```
+Ctrl+Shift+H     → Toggle HUD
+Ctrl+Shift+Space → Mode HITL interactif
+```
 
 ---
 
-## Communauté
+## 🔒 Sécurité
 
-- 💬 [Discussions](https://github.com/AMFbot-Gz/LaRuche/discussions)
-- 🐛 [Issues](https://github.com/AMFbot-Gz/LaRuche/issues)
-- 🔧 [CONTRIBUTING.md](CONTRIBUTING.md)
+- **HITL obligatoire** pour toute action irréversible ou destructive
+- **Sandbox terminal** — patterns bloqués (`rm -rf /`, fork bomb, etc.)
+- **Auth Telegram** — seul l'`ADMIN_TELEGRAM_ID` peut envoyer des commandes
+- **PathValidator LFI** — zéro traversal de répertoires
+- **AuditLogger** — trail JSON de toutes les opérations
+- **Kill Switch** — `/killall` Telegram arrête tout en < 3s
+- **Zero footprint** — Janitor Pro purge après chaque session
+
+---
+
+## 🔧 19 Modules MCP
+
+| Module | Capacités |
+|--------|-----------|
+| `mcp-os-control` | moveMouse, click, typeText, screenshot |
+| `mcp-terminal` | exec, execSafe, checkPrivilege |
+| `mcp-vision` | analyzeScreen, findElement, watchChange |
+| `mcp-vault` | storeExperience, findSimilar, getProfile |
+| `mcp-skill-factory` | createSkill, evolveSkill, listSkills |
+| `mcp-rollback` | createSnapshot, restore, purgeOldSnapshots |
+| `mcp-janitor` | purgeTemp, rotateLogs, gcRAM |
+
+---
+
+## 📦 Stack technique
+
+| Couche | Technologie |
+|--------|-------------|
+| Runtime | Node.js 20+ · Python 3.11 |
+| IA | Ollama (GLM-4.6, Qwen3, LLaMA 3.2, LLaVA) |
+| Bot | Telegraf.js v4 |
+| HUD | Electron 28 |
+| Frontend | React 18 + Vite |
+| Mémoire | ChromaDB (vectoriel) + SQLite |
+| Contrôle | RobotJS + PyAutoGUI |
+| Process | PM2 |
+| Types | TypeScript strict |
+
+---
+
+## 🗺️ Roadmap
+
+### En cours — v3.3
+- [ ] Streaming temps réel dans Telegram
+- [ ] Support missions multi-fichiers
+- [ ] Amélioration détection computer-use
+
+### v4.0 — Vision
+- [ ] Tests unitaires Jest complets (100+ tests)
+- [ ] JWT auth dashboard
+- [ ] Rate limiter Telegram
+- [ ] Semantic search ChromaDB
+- [ ] Provider fallback chain (Ollama→Anthropic→OpenAI)
+
+Consultez les [issues](https://github.com/AMFbot-Gz/LaRuche/issues) pour contribuer.
+
+---
+
+## 🤝 Contribuer
+
+LaRuche est **open source et construit par sa communauté**.
+
+```bash
+# Fork → Clone → Branch
+git checkout -b feat/ma-feature
+
+# Développer + tester
+node test/smoke.js   # 22 tests smoke
+
+# PR
+git push origin feat/ma-feature
+```
+
+Consultez le [Guide de contribution](CONTRIBUTING.md) pour tous les détails.
+
+**Première contribution ?** Issues labelisées [`good first issue`](https://github.com/AMFbot-Gz/LaRuche/issues?q=label%3A%22good+first+issue%22).
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Diagrammes Mermaid, flux de données |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Guide de contribution complet |
+| [.github/SECURITY.md](.github/SECURITY.md) | Politique de sécurité |
 
 ---
 
 <div align="center">
-<strong>🐝 LaRuche — Une commande. Un essaim. Un résultat.</strong>
+
+**🐝 LaRuche — Construite par des abeilles, pour des abeilles**
+
+*"Une commande. Un essaim. Un résultat."*
+
+<br/>
+
+[⭐ Star](https://github.com/AMFbot-Gz/LaRuche) · [🐛 Bug](https://github.com/AMFbot-Gz/LaRuche/issues/new?template=bug_report.yml) · [💡 Feature](https://github.com/AMFbot-Gz/LaRuche/issues/new?template=feature_request.yml) · [💬 Discussions](https://github.com/AMFbot-Gz/LaRuche/discussions)
+
 </div>

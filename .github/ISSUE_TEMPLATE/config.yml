@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 Discussions
+    url: https://github.com/AMFbot-Gz/LaRuche/discussions
+    about: Questions, idées, showcase de votre usage de LaRuche
+  - name: 📖 Documentation
+    url: https://github.com/AMFbot-Gz/LaRuche/tree/main/docs
+    about: Consultez la documentation avant d'ouvrir une issue

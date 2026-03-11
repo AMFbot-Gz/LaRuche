@@ -1,0 +1,63 @@
+name: 💡 Feature Request
+description: Proposer une nouvelle fonctionnalité pour LaRuche
+title: "[Feature] "
+labels: ["enhancement", "needs-discussion"]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Merci de proposer une amélioration pour LaRuche !
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Catégorie
+      options:
+        - 🤖 Agents & IA
+        - 💬 Bot Telegram
+        - 🖥️ Dashboard / HUD
+        - 🔧 Tools & MCP
+        - 🧩 Skills
+        - 🔒 Sécurité
+        - 🖥️ CLI
+        - 📚 Documentation
+        - Autre
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problème à résoudre
+      placeholder: "Je dois souvent faire X manuellement et ce serait utile si LaRuche pouvait..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solution proposée
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priorité selon vous
+      options:
+        - 🔴 Critique
+        - 🟠 Haute
+        - 🟡 Moyenne
+        - 🟢 Basse
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: Je serais prêt(e) à implémenter cette feature (PR)
+        - label: Je peux aider à tester
+        - label: Je peux aider à documenter
