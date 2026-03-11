@@ -1,11 +1,11 @@
 /**
- * intentPipeline.js — Pipeline intention → plan → exécution avec vision loop
+ * intentPipeline.js - Pipeline intention -> plan -> exécution avec vision loop
  *
  * Améliorations v2:
- *   - Vision entre chaque step (validation + détection d'erreurs)
- *   - Auto-correction sur échec (screenshot → analyse → replan step)
- *   - Playwright comme MCP prioritaire, AppleScript en fallback
- *   - Chargement dynamique des skills depuis workspace/skills/
+ * - Vision entre chaque step (validation + détection d'erreurs)
+ * - Auto-correction sur échec (screenshot -> analyse -> replan step)
+ * - Playwright comme MCP prioritaire, AppleScript en fallback
+ * - Chargement dynamique des skills depuis workspace/skills/
  */
 
 import { plan, isComputerUseIntent } from "./planner.js";
@@ -15,40 +15,58 @@ import { fileURLToPath } from "url";
 import { readdirSync, existsSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, "../..");
+const ROOT = join(__dirname, "../../");
 const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 
-// ─── MCP caller direct ────────────────────────────────────────────────────────
+// --- MCP caller direct with Retry logic --------------------------------------
 
 async function callMCP(serverFile, toolName, args = {}, timeout = 20000) {
   const rpcRequest = JSON.stringify({
-    jsonrpc: "2.0", id: 1,
+    jsonrpc: "2.0",
+    id: 1,
     method: "tools/call",
     params: { name: toolName, arguments: args },
   });
 
-  try {
-    const { stdout, stderr } = await execa("node", [join(ROOT, "mcp_servers", serverFile)], {
-      input: rpcRequest, cwd: ROOT, timeout, reject: false,
-    });
+  let lastError = null;
+  const maxRetries = 3;
 
-    if (!stdout?.trim()) return { success: false, error: stderr || "Empty MCP response" };
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const { stdout, stderr } = await execa("node", [join(ROOT, "mcp_servers", serverFile)], {
+        input: rpcRequest,
+        cwd: ROOT,
+        timeout: timeout * attempt, // Incremental timeout
+        reject: false,
+      });
 
-    const parsed = JSON.parse(stdout.trim());
-    if (parsed.error) return { success: false, error: parsed.error.message };
+      if (!stdout?.trim()) {
+         if (stderr) throw new Error(stderr);
+         throw new Error("Empty MCP response");
+      }
 
-    const text = parsed.result?.content?.[0]?.text;
-    return text ? JSON.parse(text) : (parsed.result || { success: true });
-  } catch (e) {
-    return { success: false, error: e.message };
+      const parsed = JSON.parse(stdout.trim());
+      if (parsed.error) throw new Error(parsed.error.message || "MCP Error");
+
+      const text = parsed.result?.content?.[0]?.text;
+      return text ? JSON.parse(text) : (parsed.result || { success: true });
+
+    } catch (e) {
+      lastError = e.message;
+      console.warn(`[MCP Retry] ${toolName} attempt ${attempt} failed: ${lastError}`);
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 1000 * attempt)); // Exponential backoff
+      }
+    }
   }
+
+  return { success: false, error: `Failed after ${maxRetries} attempts: ${lastError}` };
 }
 
-// ─── Vision entre les steps ───────────────────────────────────────────────────
+// --- Vision entre les steps ---------------------------------------------------
 
 async function visionValidate(question) {
   try {
-    // Appel Python vision.py pour analyser l'écran
     const { stdout } = await execa("python3", [
       join(ROOT, "src/vision.py"),
       "--fn", "analyze_screen",
@@ -63,7 +81,6 @@ async function visionValidate(question) {
 }
 
 async function takeScreenshot() {
-  // Essaie Playwright d'abord, puis PyAutoGUI
   const pwResult = await callMCP("playwright_mcp.js", "pw.screenshot", {}, 8000);
   if (pwResult?.success && pwResult?.path) return pwResult.path;
 
@@ -71,7 +88,7 @@ async function takeScreenshot() {
   return osResult?.path || null;
 }
 
-// ─── Chargement dynamique des skills ─────────────────────────────────────────
+// --- Chargement dynamique des skills -----------------------------------------
 
 let _dynamicSkills = null;
 let _dynamicSkillsTs = 0;
@@ -80,12 +97,13 @@ async function loadDynamicSkills() {
   if (_dynamicSkills && Date.now() - _dynamicSkillsTs < 30000) return _dynamicSkills;
 
   const skillsDir = join(ROOT, "workspace/skills");
-  const handlers  = {};
+  const handlers = {};
 
   if (existsSync(skillsDir)) {
     for (const name of readdirSync(skillsDir)) {
       const indexPath = join(skillsDir, name, "index.js");
       if (!existsSync(indexPath)) continue;
+
       try {
         const mod = await import(`${indexPath}?t=${Date.now()}`);
         if (typeof mod.run === "function") {
@@ -95,46 +113,37 @@ async function loadDynamicSkills() {
     }
   }
 
-  _dynamicSkills   = handlers;
+  _dynamicSkills = handlers;
   _dynamicSkillsTs = Date.now();
   return handlers;
 }
 
-// ─── Handlers builtin (fallback si pas d'index.js dans workspace) ─────────────
+// --- Handlers builtin --------------------------------------------------------
 
 const BUILTIN_HANDLERS = {
-  // Browser via Playwright (prioritaire)
-  open_safari:          (p) => callMCP("browser_mcp.js",    "os.openApp",                    { app: "Safari" }),
-  go_to_youtube:        (p) => callMCP("playwright_mcp.js", "pw.goto",                        { url: "https://www.youtube.com" }),
-  search_youtube:       (p) => callMCP("playwright_mcp.js", "pw.searchYouTube",               { query: p.query || "relaxing music" }),
-  play_first_result:    (p) => callMCP("playwright_mcp.js", "pw.clickFirstYoutubeResult",     {}),
-
-  // HID générique
-  open_app:             (p) => callMCP("browser_mcp.js",    "os.openApp",   { app: p.app || "Safari" }),
-  focus_app:            (p) => callMCP("browser_mcp.js",    "os.focusApp",  { app: p.app || "Safari" }),
-  goto_url:             (p) => callMCP("playwright_mcp.js", "pw.goto",       { url: p.url }),
-  click_element:        (p) => callMCP("playwright_mcp.js", "pw.click",      { selector: p.selector }),
-  fill_field:           (p) => callMCP("playwright_mcp.js", "pw.fill",       { selector: p.selector, text: p.text }),
-  press_key:            (p) => callMCP("playwright_mcp.js", "pw.press",      { key: p.key || "Enter" }),
-  take_screenshot:      (p) => callMCP("playwright_mcp.js", "pw.screenshot", {}),
-  extract_text:         (p) => callMCP("playwright_mcp.js", "pw.extract",    { selector: p.selector }),
-
-  // Terminal
-  run_command:          (p) => callMCP("terminal_mcp.js",   "execSafe",      { command: p.command }),
-
-  // OS
-  type_text:            (p) => callMCP("os_control_mcp.js", "typeText",      { text: p.text || p.query || "" }),
-  press_enter:          (p) => callMCP("browser_mcp.js",    "browser.pressEnter", {}),
+  open_safari: (p) => callMCP("browser_mcp.js", "os.openApp", { app: "Safari" }),
+  go_to_youtube: (p) => callMCP("playwright_mcp.js", "pw.goto", { url: "https://www.youtube.com" }),
+  search_youtube: (p) => callMCP("playwright_mcp.js", "pw.searchYouTube", { query: p.query || "relaxing music" }),
+  play_first_result: (p) => callMCP("playwright_mcp.js", "pw.clickFirstYoutubeResult", {}),
+  open_app: (p) => callMCP("browser_mcp.js", "os.openApp", { app: p.app || "Safari" }),
+  focus_app: (p) => callMCP("browser_mcp.js", "os.focusApp", { app: p.app || "Safari" }),
+  goto_url: (p) => callMCP("playwright_mcp.js", "pw.goto", { url: p.url }),
+  click_element: (p) => callMCP("playwright_mcp.js", "pw.click", { selector: p.selector }),
+  fill_field: (p) => callMCP("playwright_mcp.js", "pw.fill", { selector: p.selector, text: p.text }),
+  press_key: (p) => callMCP("playwright_mcp.js", "pw.press", { key: p.key || "Enter" }),
+  take_screenshot: (p) => callMCP("playwright_mcp.js", "pw.screenshot", {}),
+  extract_text: (p) => callMCP("playwright_mcp.js", "pw.extract", { selector: p.selector }),
+  run_command: (p) => callMCP("terminal_mcp.js", "execSafe", { command: p.command }),
+  type_text: (p) => callMCP("os_control_mcp.js", "typeText", { text: p.text || p.query || "" }),
+  press_enter: (p) => callMCP("browser_mcp.js", "browser.pressEnter", {}),
 };
 
-// ─── Exécution d'un step avec vision validation ───────────────────────────────
+// --- Exécution d'un step ------------------------------------------------------
 
 async function executeStep(step, hudFn, useVision = false) {
   const { skill, params = {} } = step;
-
   hudFn?.({ type: "task_start", task: `${skill}(${JSON.stringify(params).slice(0, 50)})` });
 
-  // Charger les skills dynamiques
   const dynamicSkills = await loadDynamicSkills();
   const handler = dynamicSkills[skill] || BUILTIN_HANDLERS[skill];
 
@@ -151,16 +160,13 @@ async function executeStep(step, hudFn, useVision = false) {
     result = { success: false, error: e.message };
   }
 
-  // Vision validation si activée et step réussi
   if (useVision && result?.success !== false) {
-    await new Promise(r => setTimeout(r, 800)); // laisser l'OS réagir
+    await new Promise(r => setTimeout(r, 800));
     const visionCheck = await visionValidate(
       `Le skill "${skill}" vient d'être exécuté. Qu'est-ce qui s'affiche à l'écran? Y a-t-il une erreur visible?`
     );
-
     if (visionCheck) {
       result._vision = visionCheck.slice(0, 200);
-      // Détecter des signaux d'erreur dans la réponse vision
       const errorSignals = ["erreur", "error", "failed", "impossible", "introuvable", "not found", "popup", "alerte"];
       const hasError = errorSignals.some(s => visionCheck.toLowerCase().includes(s));
       if (hasError) {
@@ -175,15 +181,13 @@ async function executeStep(step, hudFn, useVision = false) {
   return result;
 }
 
-// ─── Auto-correction sur échec ────────────────────────────────────────────────
+// --- Auto-correction sur échec ------------------------------------------------
 
 async function tryAutoCorrect(failedStep, errorMsg, hudFn) {
   hudFn?.({ type: "thinking", agent: "Self-Correct", thought: `Tentative correction: ${failedStep.skill}` });
 
-  // Screenshot + analyse vision
   const screenshotPath = await takeScreenshot();
   let visionContext = "";
-
   if (screenshotPath) {
     visionContext = await visionValidate(
       `Le skill "${failedStep.skill}" a échoué avec l'erreur: "${errorMsg}". Que vois-tu à l'écran? Que faut-il faire pour corriger?`
@@ -192,19 +196,7 @@ async function tryAutoCorrect(failedStep, errorMsg, hudFn) {
 
   if (!visionContext) return null;
 
-  // Demander au LLM de proposer un step corrigé
-  const prompt = `Un step a échoué dans LaRuche.
-Skill échoué: ${failedStep.skill}
-Paramètres: ${JSON.stringify(failedStep.params)}
-Erreur: ${errorMsg}
-Observation écran: ${visionContext.slice(0, 300)}
-
-Skills disponibles: open_safari, go_to_youtube, search_youtube, play_first_result, open_app, focus_app, goto_url, click_element, fill_field, press_key, run_command
-
-Propose un step JSON corrigé pour résoudre le problème:
-{"skill": "nom_skill", "params": {...}}
-
-JSON uniquement.`;
+  const prompt = `Un step a échoué dans LaRuche. Skill échoué: ${failedStep.skill} Paramètres: ${JSON.stringify(failedStep.params)} Erreur: ${errorMsg} Observation écran: ${visionContext.slice(0, 300)} Propose un step JSON corrigé: {"skill": "nom_skill", "params": {...}}`;
 
   try {
     const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
@@ -216,12 +208,11 @@ JSON uniquement.`;
     const data = await res.json();
     const match = data.response?.match(/\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
-  } catch { /* fallback to null */ }
-
+  } catch { /* fallback */ }
   return null;
 }
 
-// ─── Pipeline principal ────────────────────────────────────────────────────────
+// --- Pipeline principal --------------------------------------------------------
 
 export async function runIntentPipeline(intent, {
   hudFn, onPlanReady, onStepDone,
@@ -229,11 +220,9 @@ export async function runIntentPipeline(intent, {
   usePlaywright = true,
 } = {}) {
   const startTime = Date.now();
-
-  // 1. Planification
   hudFn?.({ type: "thinking", agent: "Planner", thought: `"${intent.slice(0, 60)}"` });
-  const planResult = await plan(intent);
 
+  const planResult = await plan(intent);
   if (planResult.error || planResult.steps.length === 0) {
     return { success: false, goal: intent, error: planResult.error || "Plan vide", steps: [], duration: Date.now() - startTime };
   }
@@ -241,15 +230,10 @@ export async function runIntentPipeline(intent, {
   onPlanReady?.(planResult);
   hudFn?.({ type: "plan_ready", tasks: planResult.steps.length, goal: planResult.goal });
 
-  // 2. Lancer Playwright si nécessaire
   if (usePlaywright) {
-    const pwResult = await callMCP("playwright_mcp.js", "pw.launch", { browser: "chromium" }, 15000);
-    if (!pwResult?.success) {
-      hudFn?.({ type: "thinking", agent: "Planner", thought: "Playwright indisponible — fallback AppleScript" });
-    }
+    await callMCP("playwright_mcp.js", "pw.launch", { browser: "chromium" }, 15000).catch(() => {});
   }
 
-  // 3. Exécution séquentielle avec vision
   const results = [];
   let allOk = true;
 
@@ -259,8 +243,7 @@ export async function runIntentPipeline(intent, {
 
     let result = await executeStep(step, hudFn, useVision);
 
-    // Auto-correction si échec
-    if (result?.success === false && i < planResult.steps.length - 1) {
+    if (result?.success === false) {
       const correctedStep = await tryAutoCorrect(step, result.error, hudFn);
       if (correctedStep) {
         hudFn?.({ type: "thinking", agent: "Self-Correct", thought: `Retry: ${correctedStep.skill}` });
@@ -272,7 +255,6 @@ export async function runIntentPipeline(intent, {
     onStepDone?.(i + 1, planResult.steps.length, step, result);
     if (result?.success === false) allOk = false;
 
-    // Pause adaptative: plus longue si vision activée
     const pauseMs = useVision ? 800 : 500;
     if (i < planResult.steps.length - 1) await new Promise(r => setTimeout(r, pauseMs));
   }
