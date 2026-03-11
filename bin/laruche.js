@@ -729,4 +729,76 @@ program
     }
   });
 
+// ─── laruche voice ────────────────────────────────────────────────────────────
+program
+  .command("voice")
+  .description("Écoute vocale continue — dit 'LaRuche <commande>' pour agir")
+  .option("--keyword <word>", "Mot-clé de déclenchement", "laruche")
+  .action(async (opts) => {
+    process.env.VOICE_KEYWORD = opts.keyword;
+    console.log(chalk.hex("#F5A623").bold(`\n🎤 LaRuche Voice — mot-clé: "${opts.keyword}"\n`));
+    console.log(chalk.dim(`Dites "${opts.keyword} <votre commande>" pour déclencher une action.`));
+    console.log(chalk.dim("Ctrl+C pour arrêter.\n"));
+
+    const { startVoiceContinuous } = await import("../src/voice_continuous.js");
+    startVoiceContinuous();
+
+    await new Promise(() => {}); // keep alive
+  });
+
+// ─── laruche watch ────────────────────────────────────────────────────────────
+program
+  .command("watch")
+  .description("Watcher proactif — surveille l'écran et alerte sur Telegram")
+  .option("--interval <ms>", "Intervalle de scan en ms", "60000")
+  .action(async (opts) => {
+    console.log(chalk.hex("#F5A623").bold(`\n👁 LaRuche Watcher — scan toutes les ${parseInt(opts.interval)/1000}s\n`));
+    console.log(chalk.dim("Détection: emails urgents, erreurs, notifications."));
+    console.log(chalk.dim("Ctrl+C pour arrêter.\n"));
+
+    const { startProactiveWatcher } = await import("../src/proactive_watcher.js");
+    await startProactiveWatcher(parseInt(opts.interval));
+
+    await new Promise(() => {}); // keep alive
+  });
+
+// ─── laruche playwright ───────────────────────────────────────────────────────
+program
+  .command("playwright <action> [args...]")
+  .description("Actions Playwright directes (goto, click, fill, screenshot...)")
+  .action(async (action, argsParts) => {
+    const arg = argsParts?.join(" ") || "";
+    const spinner = ora(chalk.dim(`pw.${action}(${arg.slice(0, 40)})`)).start();
+
+    try {
+      const { execa } = await import("execa");
+      const toolMap = {
+        goto: () => ["pw.goto", { url: arg }],
+        click: () => ["pw.click", { selector: arg }],
+        fill: () => { const [sel, ...rest] = arg.split(" "); return ["pw.fill", { selector: sel, text: rest.join(" ") }]; },
+        screenshot: () => ["pw.screenshot", {}],
+        close: () => ["pw.close", {}],
+        state: () => ["pw.getPageState", {}],
+        youtube: () => ["pw.searchYouTube", { query: arg }],
+      };
+
+      const resolved = toolMap[action];
+      if (!resolved) { spinner.fail(`Action inconnue: ${action}`); return; }
+
+      const [fn, fnArgs] = resolved();
+      const rpc = JSON.stringify({ jsonrpc:"2.0", id:1, method:"tools/call", params:{ name:fn, arguments:fnArgs } });
+      const { stdout } = await execa("node", ["mcp_servers/playwright_mcp.js"], { input:rpc, cwd:ROOT, timeout:20000, reject:false });
+      const r = JSON.parse(stdout.trim());
+      const text = r.result?.content?.[0]?.text;
+      const result = text ? JSON.parse(text) : r;
+
+      spinner.succeed(chalk.green(`${fn}`));
+      if (result.title) console.log(chalk.dim(`  Title: ${result.title}`));
+      if (result.results) console.log(chalk.dim(`  Results: ${JSON.stringify(result.results).slice(0, 200)}`));
+      if (result.path) console.log(chalk.dim(`  Screenshot: ${result.path}`));
+    } catch (e) {
+      spinner.fail(chalk.red(e.message));
+    }
+  });
+
 program.parse();

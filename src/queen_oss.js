@@ -12,6 +12,7 @@ import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import winston from "winston";
 import { ask, stream, route, autoDetectRoles, printRoles } from "./model_router.js";
+import { startCronRunner } from "./cron_runner.js";
 
 dotenv.config();
 
@@ -384,6 +385,10 @@ bot.on("text", async (ctx) => {
 
       await ctx.reply(reply, { parse_mode: "Markdown" });
       saveMission({ command: text, status: pipelineResult.success ? "success" : "partial", duration: pipelineResult.duration, ts: new Date().toISOString() });
+      // Stocker l'expérience en mémoire
+      import("./memory_store.js").then(({storeMissionMemory}) => {
+        storeMissionMemory(pipelineResult).catch(()=>{});
+      }).catch(()=>{});
 
     } else {
       // Mission texte classique → butterfly loop
@@ -432,5 +437,13 @@ logger.info("🤖 LaRuche OSS v3.1 — Bot Telegram actif ✅");
 autoDetectRoles().then((roles) => {
   logger.info(`✅ Rôles préchauffés: ${Object.values(roles).join(", ")}`);
 }).catch(() => {});
+// Démarrer le cron runner
+try {
+  startCronRunner();
+  logger.info("⏰ Cron runner démarré");
+} catch (e) {
+  logger.warn(`Cron runner: ${e.message}`);
+}
+
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

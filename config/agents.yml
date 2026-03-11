@@ -101,6 +101,22 @@ tools:
   browser.clickFirstYoutubeResult:  { mcp: "mcp-browser", fn: "browser.clickFirstYoutubeResult" }
   browser.pressKey:                 { mcp: "mcp-browser", fn: "browser.pressKey" }
 
+  # Playwright MCP
+  pw.launch:                        { mcp: "mcp-playwright", fn: "pw.launch" }
+  pw.goto:                          { mcp: "mcp-playwright", fn: "pw.goto" }
+  pw.click:                         { mcp: "mcp-playwright", fn: "pw.click" }
+  pw.fill:                          { mcp: "mcp-playwright", fn: "pw.fill" }
+  pw.press:                         { mcp: "mcp-playwright", fn: "pw.press" }
+  pw.waitFor:                       { mcp: "mcp-playwright", fn: "pw.waitFor" }
+  pw.extract:                       { mcp: "mcp-playwright", fn: "pw.extract" }
+  pw.screenshot:                    { mcp: "mcp-playwright", fn: "pw.screenshot" }
+  pw.evaluate:                      { mcp: "mcp-playwright", fn: "pw.evaluate" }
+  pw.getPageState:                  { mcp: "mcp-playwright", fn: "pw.getPageState" }
+  pw.searchYouTube:                 { mcp: "mcp-playwright", fn: "pw.searchYouTube" }
+  pw.clickFirstYoutubeResult:       { mcp: "mcp-playwright", fn: "pw.clickFirstYoutubeResult" }
+  pw.fillForm:                      { mcp: "mcp-playwright", fn: "pw.fillForm" }
+  pw.close:                         { mcp: "mcp-playwright", fn: "pw.close" }
+
   # Future: low-level hardware (optional, loaded only if script exists)
   # gpio.write:     { script: "scripts/gpio_write.py", args: [pin, value] }
   # i2c.read:       { script: "scripts/i2c_read.py",  args: [addr, reg] }
@@ -140,6 +156,7 @@ agents:
       - vault.store
       - vault.search
       - janitor.*
+      - pw.*
 
     tools_denied:
       - terminal.run             # no unrestricted shell for operator

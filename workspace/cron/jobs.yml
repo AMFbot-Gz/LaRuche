@@ -1,54 +1,51 @@
 # LaRuche Cron Jobs
-# Format: standard cron expression or human-readable interval
+# Format: standard cron expression
 # Agent: which agent executes this job
-# Skill: optional skill to activate
 
 version: "1.0"
 
 jobs:
   - id: daily_cleanup
     name: "Nettoyage quotidien"
-    schedule: "0 3 * * *"       # Every day at 3:00 AM
+    schedule: "0 3 * * *"
     agent: devops
-    skill: null
     action: |
-      Purge .laruche/temp/
-      Rotate logs older than 24h
-      Purge rollback snapshots older than 7 days
-      GC RAM if heap > 400MB
+      Purge les fichiers temporaires dans .laruche/temp/
+      Rotation des logs de plus de 24h
+      Purge des snapshots rollback de plus de 7 jours
     enabled: true
 
   - id: hourly_health
     name: "Health check horaire"
-    schedule: "0 * * * *"       # Every hour
+    schedule: "0 * * * *"
     agent: devops
-    skill: devops_logs
     action: |
-      Check PM2 process status
-      Verify Ollama is responsive
-      Check disk usage > 90%
-      Alert via Telegram if any check fails
+      Vérifie que Ollama répond sur http://localhost:11434
+      Vérifie l'espace disque disponible
+      Alerte Telegram si problème détecté
     enabled: true
-
-  - id: weekly_memory_consolidation
-    name: "Consolidation mémoire hebdo"
-    schedule: "0 2 * * 0"       # Every Sunday at 2:00 AM
-    agent: builder
-    skill: null
-    action: |
-      Summarize workspace/memory/ entries older than 7 days
-      Extract top patterns from vault ChromaDB
-      Update workspace/memory/MEMORY.md with new learned rules
-      Compress old session files in workspace/sessions/
-    enabled: false
 
   - id: regression_tests
     name: "Tests de régression nocturnes"
-    schedule: "0 2 * * *"       # Every day at 2:00 AM
+    schedule: "0 2 * * *"
     agent: devops
-    skill: null
     action: |
-      Run node test/smoke.js
-      Alert Telegram if any test fails
-      Store results in .laruche/regression-tests/
+      node test/smoke.js
     enabled: true
+
+  - id: morning_briefing
+    name: "Briefing matinal"
+    schedule: "0 9 * * 1-5"
+    agent: devops
+    action: |
+      Lire les logs d'hier et envoyer un résumé des missions exécutées
+    enabled: false
+
+  - id: weekly_memory
+    name: "Consolidation mémoire hebdo"
+    schedule: "0 2 * * 0"
+    agent: builder
+    action: |
+      Consolider les entrées de workspace/memory/MEMORY.md
+      Supprimer les doublons et compresser les anciens logs de session
+    enabled: false

@@ -29,6 +29,7 @@ const MCP_SERVERS: Record<string, { command: string; args: string[] }> = {
   "mcp-rollback":      { command: "node", args: ["mcp_servers/rollback_mcp.js"] },
   "mcp-janitor":       { command: "node", args: ["mcp_servers/janitor_mcp.js"] },
   "mcp-browser":       { command: "node", args: ["mcp_servers/browser_mcp.js"] },
+  "mcp-playwright":    { command: "node", args: ["mcp_servers/playwright_mcp.js"] },
 };
 
 // Tool name → MCP server + function mapping (from config/agents.yml tools section)
@@ -74,6 +75,21 @@ const TOOL_MAP: Record<string, { mcp: string; fn: string }> = {
   "browser.searchYouTube":           { mcp: "mcp-browser", fn: "browser.searchYouTube" },
   "browser.clickFirstYoutubeResult": { mcp: "mcp-browser", fn: "browser.clickFirstYoutubeResult" },
   "browser.pressKey":                { mcp: "mcp-browser", fn: "browser.pressKey" },
+  // Playwright (browser automation)
+  "pw.launch":                     { mcp: "mcp-playwright", fn: "pw.launch" },
+  "pw.goto":                       { mcp: "mcp-playwright", fn: "pw.goto" },
+  "pw.click":                      { mcp: "mcp-playwright", fn: "pw.click" },
+  "pw.fill":                       { mcp: "mcp-playwright", fn: "pw.fill" },
+  "pw.press":                      { mcp: "mcp-playwright", fn: "pw.press" },
+  "pw.waitFor":                    { mcp: "mcp-playwright", fn: "pw.waitFor" },
+  "pw.extract":                    { mcp: "mcp-playwright", fn: "pw.extract" },
+  "pw.screenshot":                 { mcp: "mcp-playwright", fn: "pw.screenshot" },
+  "pw.evaluate":                   { mcp: "mcp-playwright", fn: "pw.evaluate" },
+  "pw.close":                      { mcp: "mcp-playwright", fn: "pw.close" },
+  "pw.getPageState":               { mcp: "mcp-playwright", fn: "pw.getPageState" },
+  "pw.searchYouTube":              { mcp: "mcp-playwright", fn: "pw.searchYouTube" },
+  "pw.clickFirstYoutubeResult":    { mcp: "mcp-playwright", fn: "pw.clickFirstYoutubeResult" },
+  "pw.fillForm":                   { mcp: "mcp-playwright", fn: "pw.fillForm" },
 };
 
 // ─── Access control ───────────────────────────────────────────────────────────
