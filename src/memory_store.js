@@ -1,5 +1,5 @@
 /**
- * memory_store.js — Stockage actif des expériences dans MEMORY.md + vault
+ * memory_store.js - Stockage actif des expériences dans MEMORY.md + vault
  *
  * Appelé après chaque mission/pipeline pour enrichir la mémoire longue durée.
  * Extrait les patterns importants et les fusionne dans workspace/memory/MEMORY.md
@@ -14,7 +14,7 @@ const ROOT = join(__dirname, "..");
 const MEMORY_PATH = join(ROOT, "workspace/memory/MEMORY.md");
 const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 
-// ─── Lecture/écriture MEMORY.md ───────────────────────────────────────────────
+// --- Lecture/écriture MEMORY.md ----------------------------------------------
 
 function loadMemory() {
   if (!existsSync(MEMORY_PATH)) return { raw: "", entries: [] };
@@ -28,7 +28,6 @@ function appendMemory(entry) {
 
   const newBlock = `
 ---
-
 \`\`\`yaml
 id: mem_${Date.now()}
 type: ${entry.type || "rule"}
@@ -40,28 +39,22 @@ confidence: ${entry.confidence || "medium"}
 ${entry.content}
 `;
 
-  const currentContent = mem.raw || "# LaRuche Memory\n\n";
+  const currentContent = mem.raw || "# LaRuche Memory
+
+";
   writeFileSync(MEMORY_PATH, currentContent + newBlock);
 }
 
-// ─── Extraction de leçon via LLM ─────────────────────────────────────────────
+// --- Extraction de leçon via LLM ---------------------------------------------
 
 async function extractLesson(mission) {
   const { goal, steps, success, duration } = mission;
   if (!steps || steps.length === 0) return null;
 
   const failedSteps = steps.filter(s => s.result?.success === false);
-  if (success && failedSteps.length === 0) return null; // mission parfaite, rien à apprendre
+  if (success && failedSteps.length === 0) return null;
 
-  const prompt = `Une mission LaRuche vient de se terminer.
-Objectif: ${goal}
-Succès: ${success}
-Étapes: ${steps.map(s => `${s.step?.skill}(${JSON.stringify(s.step?.params || {})}) → ${s.result?.success !== false ? "OK" : "ECHEC: " + (s.result?.error || "?")}`).join(", ")}
-Durée: ${(duration / 1000).toFixed(1)}s
-
-Si cette mission a échoué ou pourrait être améliorée, quelle règle générale peut-on en déduire?
-Si la mission a complètement réussi, réponds "SKIP".
-Sinon, réponds avec UNE seule règle courte (1-2 phrases max).`;
+  const prompt = `Une mission LaRuche vient de se terminer. Objectif: ${goal} Succès: ${success} Étapes: ${steps.map(s => `${s.step?.skill}(${JSON.stringify(s.step?.params || {})}) -> ${s.result?.success !== false ? "OK" : "ECHEC: " + (s.result?.error || "?")}`).join(", ")} Durée: ${(duration / 1000).toFixed(1)}s Si cette mission a échoué ou pourrait être améliorée, quelle règle générale peut-on en déduire? Sinon, SKIP.`;
 
   try {
     const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
@@ -79,42 +72,59 @@ Sinon, réponds avec UNE seule règle courte (1-2 phrases max).`;
   }
 }
 
-// ─── API principale ───────────────────────────────────────────────────────────
+// --- API principale with Debounce logic --------------------------------------
+
+let _lastStoredMissionId = null;
+let _storageTimeout = null;
 
 export async function storeMissionMemory(mission) {
-  try {
-    // 1. Stocker dans vault (ChromaDB)
-    const { execa } = await import("execa");
-    const rpc = JSON.stringify({
-      jsonrpc: "2.0", id: 1, method: "tools/call",
-      params: {
-        name: "storeExperience",
-        arguments: {
-          task: mission.goal || "",
-          result: JSON.stringify(mission.steps?.slice(0, 3) || []).slice(0, 200),
-          success: mission.success !== false,
-          skillUsed: mission.steps?.[0]?.step?.skill || "unknown",
+  // Prevent duplicate storage of the same mission result within 2 seconds
+  const missionId = `${mission.goal}_${mission.success}_${mission.steps?.length}`;
+  if (_lastStoredMissionId === missionId) return;
+
+  if (_storageTimeout) clearTimeout(_storageTimeout);
+
+  _storageTimeout = setTimeout(async () => {
+    _lastStoredMissionId = missionId;
+    try {
+      // 1. Stocker dans vault (ChromaDB)
+      const { execa } = await import("execa");
+      const rpc = JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name: "storeExperience",
+          arguments: {
+            task: mission.goal || "",
+            result: JSON.stringify(mission.steps?.slice(0, 3) || []).slice(0, 200),
+            success: mission.success !== false,
+            skillUsed: mission.steps?.[0]?.step?.skill || "unknown",
+          },
         },
-      },
-    });
-
-    await execa("node", [join(ROOT, "mcp_servers/vault_mcp.js")], {
-      input: rpc, cwd: ROOT, timeout: 10000, reject: false,
-    }).catch(() => {});
-
-    // 2. Extraire leçon et stocker dans MEMORY.md
-    const lesson = await extractLesson(mission);
-    if (lesson) {
-      mkdirSync(join(ROOT, "workspace/memory"), { recursive: true });
-      appendMemory({
-        type: "error_lesson",
-        scope: "global",
-        tags: ["auto-learned", "pipeline"],
-        confidence: "medium",
-        content: lesson,
       });
-    }
-  } catch { /* non-fatal */ }
+
+      await execa("node", [join(ROOT, "mcp_servers/vault_mcp.js")], {
+        input: rpc,
+        cwd: ROOT,
+        timeout: 10000,
+        reject: false,
+      }).catch(() => {});
+
+      // 2. Extraire leçon et stocker dans MEMORY.md
+      const lesson = await extractLesson(mission);
+      if (lesson) {
+        mkdirSync(join(ROOT, "workspace/memory"), { recursive: true });
+        appendMemory({
+          type: "error_lesson",
+          scope: "global",
+          tags: ["auto-learned", "pipeline"],
+          confidence: "medium",
+          content: lesson,
+        });
+      }
+    } catch { /* non-fatal */ }
+  }, 1000);
 }
 
 export async function storeRule(rule, tags = [], scope = "global") {
