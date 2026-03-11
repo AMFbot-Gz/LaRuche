@@ -1,26 +1,30 @@
 /**
  * queen_oss.js — LaRuche Queen Open Source Edition
- * 100% Ollama local — GLM, Kimi, Qwen3-Coder, LLaVA
- * Zéro API cloud, zéro coût, vie privée totale
+ * Version Optimisée & Refactorisée v3.2
+ * 100% Ollama local — Zéro API cloud, zéro coût, vie privée totale
  */
 
 import { Telegraf } from "telegraf";
 import { WebSocketServer } from "ws";
-import { readFileSync, writeFileSync, mkdirSync } from "fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import winston from "winston";
-import { ask, stream, route, autoDetectRoles, printRoles } from "./model_router.js";
+import { ask, autoDetectRoles, printRoles } from "./model_router.js";
 import { startCronRunner } from "./cron_runner.js";
 
 dotenv.config();
 
+// ─── Chemins et Constantes ───────────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
+const LOG_DIR = join(ROOT, ".laruche/logs");
+const MISSIONS_FILE = join(ROOT, ".laruche/missions.json");
 
-// ─── Logger ───────────────────────────────────────────────────────────────────
-mkdirSync(join(ROOT, ".laruche/logs"), { recursive: true });
+if (!existsSync(LOG_DIR)) mkdirSync(LOG_DIR, { recursive: true });
+
+// ─── Logger (Winston) ─────────────────────────────────────────────────────────
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || "info",
   format: winston.format.combine(
@@ -31,121 +35,142 @@ const logger = winston.createLogger({
   ),
   transports: [
     new winston.transports.Console(),
-    new winston.transports.File({
-      filename: join(ROOT, ".laruche/logs/queen.log"),
-    }),
+    new winston.transports.File({ filename: join(LOG_DIR, "queen.log") }),
   ],
 });
 
-// ─── Config ───────────────────────────────────────────────────────────────────
-const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const ADMIN_ID = process.env.ADMIN_TELEGRAM_ID;
+// ─── Validation de la Config ──────────────────────────────────────────────────
+const CONFIG = {
+  TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN,
+  ADMIN_ID: process.env.ADMIN_TELEGRAM_ID,
+  HUD_PORT: parseInt(process.env.HUD_PORT || "9001", 10),
+};
 
-if (!TELEGRAM_TOKEN) { logger.error("TELEGRAM_BOT_TOKEN manquant"); process.exit(1); }
-if (!ADMIN_ID) { logger.error("ADMIN_TELEGRAM_ID manquant"); process.exit(1); }
+if (!CONFIG.TELEGRAM_TOKEN) {
+  logger.error("TELEGRAM_BOT_TOKEN manquant");
+  process.exit(1);
+}
+if (!CONFIG.ADMIN_ID) {
+  logger.error("ADMIN_TELEGRAM_ID manquant");
+  process.exit(1);
+}
 
-// ─── Mission log simple (JSON) ────────────────────────────────────────────────
-const MISSIONS_FILE = join(ROOT, ".laruche/missions.json");
-
-// Cache mémoire missions
+// ─── Missions (Cache + Persistance) ───────────────────────────────────────────
 let _missionsCache = null;
+
 function loadMissions() {
   if (_missionsCache) return _missionsCache;
-  try { _missionsCache = JSON.parse(readFileSync(MISSIONS_FILE, "utf-8")); }
-  catch { _missionsCache = []; }
+  try {
+    _missionsCache = existsSync(MISSIONS_FILE)
+      ? JSON.parse(readFileSync(MISSIONS_FILE, "utf-8"))
+      : [];
+  } catch (err) {
+    logger.error(`Erreur chargement missions: ${err.message}`);
+    _missionsCache = [];
+  }
   return _missionsCache;
 }
+
 function saveMission(entry) {
-  _missionsCache = [entry, ...(loadMissions())].slice(0, 200);
-  writeFileSync(MISSIONS_FILE, JSON.stringify(_missionsCache, null, 2));
+  _missionsCache = [entry, ...loadMissions()].slice(0, 200);
+  try {
+    writeFileSync(MISSIONS_FILE, JSON.stringify(_missionsCache, null, 2));
+  } catch (err) {
+    logger.error(`Erreur sauvegarde mission: ${err.message}`);
+  }
 }
 
-// Helper découpe de message Telegram (max 4096 chars, marge de sécurité)
-const splitMsg = (text, max = 3900) => text.match(new RegExp(`.{1,${max}}`, "g")) || [text];
+// ─── Utilitaires ──────────────────────────────────────────────────────────────
+const splitMsg = (text, max = 3900) => {
+  const chunks = [];
+  for (let i = 0; i < text.length; i += max) {
+    chunks.push(text.slice(i, i + max));
+  }
+  return chunks.length ? chunks : [text];
+};
 
-// ─── HUD WebSocket ────────────────────────────────────────────────────────────
-let hudClients = new Set();
-const wss = new WebSocketServer({ port: 9001 });
+const safeParseJSON = (text, fallback) => {
+  try {
+    const match = text.match(/\{[\s\S]*\}/);
+    return match ? JSON.parse(match[0]) : fallback;
+  } catch {
+    return fallback;
+  }
+};
+
+// ─── HUD Service (WebSocket) ───────────────────────────────────────────────────
+const hudClients = new Set();
+const wss = new WebSocketServer({ port: CONFIG.HUD_PORT });
+
 wss.on("connection", (ws) => {
   hudClients.add(ws);
+  logger.info(`HUD: Client connecté (${hudClients.size})`);
   ws.on("close", () => hudClients.delete(ws));
-  logger.info(`HUD client connecté (${hudClients.size})`);
 });
 
-function hud(event) {
+function broadcastHUD(event) {
   const msg = JSON.stringify({ ...event, ts: Date.now() });
-  hudClients.forEach((ws) => { if (ws.readyState === 1) ws.send(msg); });
+  hudClients.forEach((ws) => {
+    if (ws.readyState === 1) ws.send(msg);
+  });
 }
 
-// ─── Butterfly Loop OSS ───────────────────────────────────────────────────────
+// ─── Butterfly Loop (Cœur IA) ──────────────────────────────────────────────────────
 async function butterflyLoop(command, ctx) {
   const start = Date.now();
   logger.info(`🦋 Mission: ${command.substring(0, 80)}`);
-  hud({ type: "mission_start", command: command.substring(0, 100) });
+  broadcastHUD({ type: "mission_start", command: command.substring(0, 100) });
 
-  // Un seul appel autoDetectRoles() par mission — le résultat est passé en paramètre
   const roles = await autoDetectRoles();
 
   try {
-    // 1. Décomposition par le Stratège (GLM-4.6 ou meilleur disponible)
-    await ctx.reply(`🧠 Analyse avec **${roles.strategist}**...`, { parse_mode: "Markdown" });
-    hud({ type: "thinking", agent: "L1_Stratège", thought: "Décomposition de la mission..." });
+    // 1. Stratégie
+    await ctx.reply(`🧠 Analyse stratégique avec **${roles.strategist}**...`, {
+      parse_mode: "Markdown",
+    });
+    broadcastHUD({ type: "thinking", agent: "Stratège", thought: "Planification..." });
 
-    const planPrompt = `Tu es le stratège de LaRuche, un essaim d'agents IA.
+    const planPrompt = `Tu es le stratège de LaRuche.
 Mission: "${command}"
 
 Décompose en 2-4 micro-tâches JSON:
 {
   "mission": "résumé court",
   "tasks": [
-    {"id": 1, "description": "...", "role": "architect|worker|vision"}
+    {"id": 1, "description": "...", "role": "worker"}
   ]
 }
-
 Réponds UNIQUEMENT en JSON valide.`;
 
     const planResult = await ask(planPrompt, { role: "strategist", temperature: 0.2 });
-    hud({ type: "thinking", agent: "L1_Stratège", thought: planResult.text.substring(0, 100) });
-
-    let plan;
-    try {
-      const match = planResult.text.match(/\{[\s\S]*\}/);
-      plan = match ? JSON.parse(match[0]) : {
-        mission: command,
-        tasks: [{ id: 1, description: command, role: "worker" }],
-      };
-    } catch {
-      plan = { mission: command, tasks: [{ id: 1, description: command, role: "worker" }] };
-    }
-
-    await ctx.reply(`📋 **${plan.mission}**\n${plan.tasks.map((t) => `  • ${t.description}`).join("\n")}`, {
-      parse_mode: "Markdown",
+    const plan = safeParseJSON(planResult.text, {
+      mission: command,
+      tasks: [{ id: 1, description: command, role: "worker" }],
     });
-    hud({ type: "plan_ready", tasks: plan.tasks.length });
 
-    // 2. Exécution parallèle par les Ouvrières
+    await ctx.reply(
+      `📋 **${plan.mission || "Plan d'exécution"}**\n${plan.tasks
+        .map((t) => ` • ${t.description}`)
+        .join("\n")}`,
+      { parse_mode: "Markdown" }
+    );
+    broadcastHUD({ type: "plan_ready", tasks: plan.tasks.length });
+
+    // 2. Exécution parallèle
     const results = await Promise.all(
       plan.tasks.map(async (task) => {
-        hud({ type: "task_start", task: task.description.substring(0, 60) });
-
-        const model = task.role === "architect" ? roles.architect
-          : task.role === "vision" ? roles.vision
-          : roles.worker;
-
-        const result = await ask(
-          `Tâche: ${task.description}\nContexte: ${plan.mission}\n\nRéponds directement et avec précision.`,
-          { role: task.role || "worker", temperature: task.role === "architect" ? 0.1 : 0.4 }
-        );
-
-        logger.info(`⚡ [${model}] Tâche ${task.id} terminée`);
-        hud({ type: "task_done", task: task.description.substring(0, 60) });
-        return { task: task.description, result: result.text, model: result.model };
+        broadcastHUD({ type: "task_start", task: task.description.substring(0, 60) });
+        const role = task.role || "worker";
+        const res = await ask(task.description, { role, temperature: 0.3 });
+        logger.info(`⚡ [${res.model}] Tâche ${task.id} terminée`);
+        broadcastHUD({ type: "task_done", task: task.description.substring(0, 60) });
+        return { ...task, result: res.text, model: res.model };
       })
     );
 
-    // 3. Synthèse Chain-of-Thought
-    hud({ type: "thinking", agent: "L2_Synthèse", thought: "Synthèse des résultats..." });
-    const synthPrompt = `Synthétise ces résultats en une réponse claire pour l'utilisateur:
+    // 3. Synthèse
+    broadcastHUD({ type: "thinking", agent: "Synthèse", thought: "Finalisation..." });
+    const synthPrompt = `Synthétise ces résultats en une réponse claire:
 ${results.map((r, i) => `[${i + 1}] ${r.result.substring(0, 300)}`).join("\n\n")}
 
 Objectif: ${plan.mission}
@@ -154,94 +179,117 @@ Réponse directe, sans répéter les étapes.`;
     const synthesis = await ask(synthPrompt, { role: "synthesizer", temperature: 0.3 });
 
     const duration = Date.now() - start;
-    saveMission({ command, status: "success", duration, models: [...new Set(results.map((r) => r.model))], ts: new Date().toISOString() });
-    hud({ type: "mission_complete", duration, cost: 0 });
-
-    // Modèles utilisés
     const modelsUsed = [...new Set(results.map((r) => r.model))].join(", ");
-    return `${synthesis.text}\n\n_Modèles: ${modelsUsed} — ${(duration / 1000).toFixed(1)}s_`;
 
-  } catch (e) {
-    logger.error(`Butterfly Loop error: ${e.message}`);
-    saveMission({ command, status: "error", error: e.message, ts: new Date().toISOString() });
-    hud({ type: "mission_error", error: e.message });
-    throw e;
+    saveMission({
+      command,
+      status: "success",
+      duration,
+      models: [...new Set(results.map((r) => r.model))],
+      ts: new Date().toISOString(),
+    });
+    broadcastHUD({ type: "mission_complete", duration, cost: 0 });
+
+    return `${synthesis.text}\n\n_⏱ ${(duration / 1000).toFixed(1)}s — Modèles: ${modelsUsed}_`;
+  } catch (err) {
+    logger.error(`Butterfly Loop: ${err.message}`);
+    saveMission({ command, status: "error", error: err.message, ts: new Date().toISOString() });
+    broadcastHUD({ type: "mission_error", error: err.message });
+    throw err;
   }
 }
 
-// ─── Bot Telegram ─────────────────────────────────────────────────────────────
-const bot = new Telegraf(TELEGRAM_TOKEN);
+// ─── Bot Telegram Service ───────────────────────────────────────────────────────
+const bot = new Telegraf(CONFIG.TELEGRAM_TOKEN);
 
-// Auth middleware
+// Auth Middleware
 bot.use(async (ctx, next) => {
-  if (String(ctx.from?.id) !== ADMIN_ID) {
+  if (String(ctx.from?.id) !== CONFIG.ADMIN_ID) {
     await ctx.reply("⛔ Accès refusé.");
     return;
   }
   return next();
 });
 
+// Commande /start
 bot.command("start", async (ctx) => {
   const roles = await autoDetectRoles();
   await ctx.reply(
-    `🐝 *LaRuche OSS v3.1 — 100% Local*\n\n` +
-    `*Modèles actifs:*\n` +
-    `  👑 Stratège: \`${roles.strategist}\`\n` +
-    `  🔧 Code: \`${roles.architect}\`\n` +
-    `  ⚡ Worker: \`${roles.worker}\`\n` +
-    `  👁 Vision: \`${roles.vision}\`\n\n` +
-    `*Commandes:*\n` +
-    `/status — État\n` +
-    `/models — Modèles actifs\n` +
-    `/mission <texte> — Mission\n` +
-    `/skill <desc> — Créer skill\n\n` +
-    `_Message libre → Mission directe_`,
+    `🐝 *LaRuche OSS v3.2 — 100% Local*\n\n` +
+      `*Modèles actifs:*\n` +
+      ` 👑 Stratège: \`${roles.strategist}\`\n` +
+      ` 🔧 Code: \`${roles.architect}\`\n` +
+      ` ⚡ Worker: \`${roles.worker}\`\n` +
+      ` 👁 Vision: \`${roles.vision}\`\n\n` +
+      `*Commandes:*\n` +
+      `/status — État\n` +
+      `/models — Modèles actifs\n` +
+      `/mission <tâche> — Mission\n` +
+      `/skill <desc> — Créer skill\n\n` +
+      `_Message libre → Mission directe_`,
     { parse_mode: "Markdown" }
   );
 });
 
+// Commande /models
 bot.command("models", async (ctx) => {
   const roles = await autoDetectRoles();
-  const lines = Object.entries(roles).map(([role, model]) => `  \`${role}\`: ${model}`);
-  await ctx.reply(`*Configuration Modèles (Ollama local):*\n\n${lines.join("\n")}`, { parse_mode: "Markdown" });
+  const lines = Object.entries(roles).map(
+    ([role, model]) => ` \`${role}\`: ${model}`
+  );
+  await ctx.reply(
+    `*Configuration Modèles (Ollama local):*\n\n${lines.join("\n")}`,
+    { parse_mode: "Markdown" }
+  );
 });
 
+// Commande /status
 bot.command("status", async (ctx) => {
   const roles = await autoDetectRoles();
   const missions = loadMissions();
   const success = missions.filter((m) => m.status === "success").length;
   await ctx.reply(
     `*ÉTAT LARUCHE OSS*\n\n` +
-    `Stratège: \`${roles.strategist}\`\n` +
-    `Missions: ${missions.length} (${success} réussies)\n` +
-    `HUD: ✅ ${hudClients.size} client(s)\n` +
-    `Uptime: ${Math.floor(process.uptime() / 60)}min\n` +
-    `Mode: 🔓 100% Open Source Local`,
+      `Stratège: \`${roles.strategist}\`\n` +
+      `Missions: ${missions.length} (${success} réussies)\n` +
+      `HUD: ✅ ${hudClients.size} client(s)\n` +
+      `Uptime: ${Math.floor(process.uptime() / 60)}min\n` +
+      `Mode: 🔓 100% Open Source Local`,
     { parse_mode: "Markdown" }
   );
 });
 
+// Commande /mission
 bot.command("mission", async (ctx) => {
   const text = ctx.message.text.replace("/mission", "").trim();
-  if (!text) { await ctx.reply("Usage: /mission <votre commande>"); return; }
+  if (!text) {
+    await ctx.reply("Usage: /mission <tâche>");
+    return;
+  }
   try {
     const result = await butterflyLoop(text, ctx);
     for (const chunk of splitMsg(result)) {
       await ctx.reply(chunk, { parse_mode: "Markdown" });
     }
-  } catch (e) { await ctx.reply(`❌ ${e.message}`); }
+  } catch (err) {
+    await ctx.reply(`❌ ${err.message}`);
+  }
 });
 
+// Commande /skill
 bot.command("skill", async (ctx) => {
   const desc = ctx.message.text.replace("/skill", "").trim();
-  if (!desc) { await ctx.reply("Usage: /skill <description du skill>"); return; }
-
+  if (!desc) {
+    await ctx.reply("Usage: /skill <description>");
+    return;
+  }
   const roles = await autoDetectRoles();
-  const msg = await ctx.reply(`🔧 Génération skill avec \`${roles.architect}\`...`, { parse_mode: "Markdown" });
+  const msg = await ctx.reply(`🔧 Génération skill avec \`${roles.architect}\`...`, {
+    parse_mode: "Markdown",
+  });
 
   const codePrompt = `Génère un skill JavaScript pour LaRuche:
 Description: ${desc}
-
 Format EXACT:
 \`\`\`js
 // Skill: ${desc}
@@ -250,126 +298,68 @@ export async function run(params) {
   return { success: true, result: "..." };
 }
 \`\`\`
-
 Code fonctionnel uniquement, pas d'explication.`;
 
   const result = await ask(codePrompt, { role: "architect", temperature: 0.1 });
-
   const skillName = desc.toLowerCase().replace(/[^a-z0-9]+/g, "_").substring(0, 25);
   const skillDir = join(ROOT, "skills", skillName);
   mkdirSync(skillDir, { recursive: true });
   writeFileSync(join(skillDir, "skill.js"), result.text);
-  writeFileSync(join(skillDir, "manifest.json"), JSON.stringify({
-    name: skillName, description: desc, version: "1.0.0",
-    model: result.model, created: new Date().toISOString(),
-  }, null, 2));
-
+  writeFileSync(
+    join(skillDir, "manifest.json"),
+    JSON.stringify(
+      {
+        name: skillName,
+        description: desc,
+        version: "1.0.0",
+        model: result.model,
+        created: new Date().toISOString(),
+      },
+      null,
+      2
+    )
+  );
   await ctx.telegram.editMessageText(
-    ctx.chat.id, msg.message_id, undefined,
+    ctx.chat.id,
+    msg.message_id,
+    undefined,
     `✅ Skill créé: \`${skillName}\`\n\n${result.text.substring(0, 500)}`,
     { parse_mode: "Markdown" }
   );
 });
 
-// ─── Agent commands ────────────────────────────────────────────────────────
-bot.command("agent", async (ctx) => {
-  const parts = ctx.message.text.replace("/agent", "").trim().split(" ");
-  const agentName = parts[0] || "devops";
-  const task = parts.slice(1).join(" ");
-
-  if (!task) {
-    await ctx.reply(
-      `Usage: /agent <nom> <mission>\n\n` +
-      `Agents disponibles:\n` +
-      `  \`operator\` — HID, souris, apps\n` +
-      `  \`devops\`   — terminal, logs, déploiement\n` +
-      `  \`builder\`  — code, skills, projets`,
-      { parse_mode: "Markdown" }
-    );
-    return;
-  }
-
-  const msg = await ctx.reply(`🤖 Agent **${agentName}** → \`${task.slice(0, 60)}\``, { parse_mode: "Markdown" });
-
-  try {
-    const { runAgent } = await import("./agents/agentBridge.js");
-    let buffer = "";
-
-    const result = await runAgent({
-      agentName,
-      userInput: task,
-      onToken: (t) => { buffer += t; },
-      onToolCall: (tool, args) => {
-        logger.info(`[agent:${agentName}] tool: ${tool}`);
-        hud({ type: "task_start", task: `${tool}(${JSON.stringify(args).slice(0, 40)})` });
-      },
-      onHITL: async (action, risk) => {
-        await ctx.reply(`⚠️ HITL requis: \`${action}\` (risque: ${(risk * 100).toFixed(0)}%)\nRéponds /approve ou /reject`, { parse_mode: "Markdown" });
-        return true; // auto-approve for now; can be made interactive
-      },
-    });
-
-    const response = result.response || buffer;
-    const footer = `\n\n_Session: \`${result.sessionId}\` | ${result.iterations} iter. | ${result.tool_calls_count} tools_`;
-
-    for (const chunk of splitMsg(response + footer)) {
-      await ctx.reply(chunk, { parse_mode: "Markdown" });
-    }
-  } catch (e) {
-    await ctx.reply(`❌ Agent error: ${e.message}`);
-  }
-});
-
-// /intent — forcer le pipeline planner+operator sur une intention
-bot.command("intent", async (ctx) => {
-  const text = ctx.message.text.replace("/intent", "").trim();
-  if (!text) { await ctx.reply("Usage: /intent <intention>\nEx: /intent mets-moi de la musique"); return; }
-
-  const { runIntentPipeline } = await import("./agents/intentPipeline.js");
-  const statusMsg = await ctx.reply(`🧠 Pipeline intention: _"${text.slice(0, 60)}"_`, { parse_mode: "Markdown" });
-
-  try {
-    const result = await runIntentPipeline(text, {
-      hudFn: hud,
-      onPlanReady: async (planResult) => {
-        const stepList = planResult.steps.map((s, i) => `  ${i + 1}. \`${s.skill}\``).join("\n");
-        await ctx.telegram.editMessageText(
-          ctx.chat.id, statusMsg.message_id, undefined,
-          `📋 *${planResult.goal}*\n\n${stepList}\n\n_Exécution en cours..._`,
-          { parse_mode: "Markdown" }
-        ).catch(() => {});
-      },
-    });
-
-    const duration = (result.duration / 1000).toFixed(1);
-    const icon = result.success ? "✅" : "⚠️";
-    await ctx.reply(`${icon} *${result.goal}*\n_${result.steps.length} étapes — ${duration}s — ${result.model || "local"}_`, { parse_mode: "Markdown" });
-
-  } catch (e) { await ctx.reply(`❌ ${e.message}`); }
-});
-
-// Messages libres → détection intention computer-use ou mission texte
+// ─── Messages libres ──────────────────────────────────────────────────────────────
 bot.on("text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return;
   const text = ctx.message.text.trim();
 
   try {
-    // Détection intention computer-use (ouvre, lance, mets de la musique...)
-    const { isComputerUseIntent, runIntentPipeline } = await import("./agents/intentPipeline.js");
+    // Détection intention computer-use
+    const { isComputerUseIntent, runIntentPipeline } = await import(
+      "./agents/intentPipeline.js"
+    );
 
     if (isComputerUseIntent(text)) {
       // Pipeline planner + operator
-      const statusMsg = await ctx.reply(`🧠 Planification: _"${text.slice(0, 60)}"_`, { parse_mode: "Markdown" });
-
+      const statusMsg = await ctx.reply(
+        `🧠 Planification: _"${text.slice(0, 60)}"_`,
+        { parse_mode: "Markdown" }
+      );
       const pipelineResult = await runIntentPipeline(text, {
-        hudFn: hud,
+        hudFn: broadcastHUD,
         onPlanReady: async (planResult) => {
-          const stepList = planResult.steps.map((s, i) => `  ${i + 1}. \`${s.skill}\``).join("\n");
-          await ctx.telegram.editMessageText(
-            ctx.chat.id, statusMsg.message_id, undefined,
-            `📋 *${planResult.goal}*\n\n${stepList}`,
-            { parse_mode: "Markdown" }
-          ).catch(() => {});
+          const stepList = planResult.steps
+            .map((s, i) => ` ${i + 1}. \`${s.skill}\``)
+            .join("\n");
+          await ctx.telegram
+            .editMessageText(
+              ctx.chat.id,
+              statusMsg.message_id,
+              undefined,
+              `📋 *${planResult.goal}*\n\n${stepList}`,
+              { parse_mode: "Markdown" }
+            )
+            .catch(() => {});
         },
         onStepDone: (current, total, step, result) => {
           const icon = result?.success !== false ? "✅" : "❌";
@@ -384,66 +374,89 @@ bot.on("text", async (ctx) => {
         : `${icon} *Partiel:* ${pipelineResult.goal}\n_${pipelineResult.error || "Certaines étapes ont échoué"}_`;
 
       await ctx.reply(reply, { parse_mode: "Markdown" });
-      saveMission({ command: text, status: pipelineResult.success ? "success" : "partial", duration: pipelineResult.duration, ts: new Date().toISOString() });
-      // Stocker l'expérience en mémoire
-      import("./memory_store.js").then(({storeMissionMemory}) => {
-        storeMissionMemory(pipelineResult).catch(()=>{});
-      }).catch(()=>{});
+      saveMission({
+        command: text,
+        status: pipelineResult.success ? "success" : "partial",
+        duration: pipelineResult.duration,
+        ts: new Date().toISOString(),
+      });
 
+      // Mémoire
+      import("./memory_store.js")
+        .then(({ storeMissionMemory }) => {
+          storeMissionMemory(pipelineResult).catch(() => {});
+        })
+        .catch(() => {});
     } else {
-      // Mission texte classique → butterfly loop
+      // Mission texte classique
       const result = await butterflyLoop(text, ctx);
       for (const chunk of splitMsg(result)) {
         await ctx.reply(chunk, { parse_mode: "Markdown" });
       }
     }
-  } catch (e) {
-    logger.error(`Text handler: ${e.message}`);
-    await ctx.reply(`❌ ${e.message}`);
+  } catch (err) {
+    logger.error(`Text handler: ${err.message}`);
+    await ctx.reply(`❌ ${err.message}`);
   }
 });
 
-// ─── Démarrage ────────────────────────────────────────────────────────────────
+// ─── Démarrage et Shutdown ────────────────────────────────────────────────────
 logger.info("╔══════════════════════════════════════════╗");
-logger.info("║  🐝 LaRuche OSS v3.1 — 100% Local       ║");
+logger.info("║ 🐝 LaRuche OSS v3.2 — 100% Local       ║");
 logger.info("╚══════════════════════════════════════════╝");
 
 await printRoles();
 
-// bot.launch() en Telegraf 4.x est une boucle infinie — ne jamais await
-// On démarre en arrière-plan et on gère les erreurs séparément
-const token = process.env.TELEGRAM_BOT_TOKEN;
-
-// Vol de session préventif
+// Libération de session Telegram préventive
 try {
-  await fetch(`https://api.telegram.org/bot${token}/getUpdates?timeout=0&offset=-1`);
-  await new Promise(r => setTimeout(r, 1500));
+  await fetch(
+    `https://api.telegram.org/bot${CONFIG.TELEGRAM_TOKEN}/getUpdates?timeout=0&offset=-1`
+  );
+  await new Promise((r) => setTimeout(r, 1500));
   logger.info("🔑 Session Telegram libérée");
-} catch {}
+} catch {
+  logger.warn("Libération session Telegram impossible");
+}
 
 // Lancement non-bloquant
-bot.launch({ dropPendingUpdates: true }).catch((e) => {
-  if (e.response?.error_code === 409) {
-    logger.error("409 Conflict — un autre bot utilise ce token. Stopper le service concurrent.");
-  } else {
-    logger.error(`Erreur bot: ${e.message}`);
-  }
-  process.exit(1);
-});
+bot
+  .launch({ dropPendingUpdates: true })
+  .then(() => {
+    logger.info("🤖 Bot Telegram actif ✅");
+  })
+  .catch((err) => {
+    if (err.response?.error_code === 409) {
+      logger.error(
+        "409 Conflict — un autre bot utilise ce token. Stopper le service concurrent."
+      );
+    } else {
+      logger.error(`Erreur bot: ${err.message}`);
+    }
+    process.exit(1);
+  });
 
-logger.info("🤖 LaRuche OSS v3.1 — Bot Telegram actif ✅");
+// Pre-warm: auto-détection des rôles
+autoDetectRoles()
+  .then((roles) => {
+    logger.info(`✅ Rôles préchauffés: ${Object.values(roles).join(", ")}`);
+  })
+  .catch(() => {});
 
-// Pre-warm: déclencher auto-détection des rôles au démarrage (évite latence premier message)
-autoDetectRoles().then((roles) => {
-  logger.info(`✅ Rôles préchauffés: ${Object.values(roles).join(", ")}`);
-}).catch(() => {});
-// Démarrer le cron runner
+// Cron runner
 try {
   startCronRunner();
   logger.info("⏰ Cron runner démarré");
-} catch (e) {
-  logger.warn(`Cron runner: ${e.message}`);
+} catch (err) {
+  logger.warn(`Cron runner: ${err.message}`);
 }
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+// Graceful shutdown
+const shutdown = () => {
+  logger.info("🛱 Arrêt en cours...");
+  bot.stop();
+  wss.close();
+  process.exit(0);
+};
+
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
