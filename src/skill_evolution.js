@@ -30,16 +30,22 @@ db.exec(`
   );
 `);
 
-function loadRegistry() {
-  try {
-    return JSON.parse(readFileSync(REGISTRY_PATH, "utf-8"));
-  } catch {
-    return { version: "1.0.0", skills: [] };
-  }
-}
+// Cache registry en mémoire
+let _registryCache = null;
+let _registryCacheTs = 0;
+const REGISTRY_TTL = 10000; // 10s
 
+function loadRegistry() {
+  if (_registryCache && Date.now() - _registryCacheTs < REGISTRY_TTL) return _registryCache;
+  try { _registryCache = JSON.parse(readFileSync(REGISTRY_PATH, "utf-8")); }
+  catch { _registryCache = { version: "1.0.0", skills: [] }; }
+  _registryCacheTs = Date.now();
+  return _registryCache;
+}
 function saveRegistry(registry) {
   registry.lastUpdated = new Date().toISOString();
+  _registryCache = registry;
+  _registryCacheTs = Date.now();
   writeFileSync(REGISTRY_PATH, JSON.stringify(registry, null, 2));
 }
 
@@ -124,15 +130,18 @@ export async function evolveSkill(skillName, bugReport) {
   const manifest = JSON.parse(readFileSync(join(skillDir, "manifest.json"), "utf-8"));
   const currentCode = readFileSync(join(skillDir, "skill.js"), "utf-8");
 
-  // 1. Analyse cause racine
-  const analysisPrompt = `Code du skill:\n${currentCode}\n\nBug reporté: ${bugReport.error}\nStack: ${bugReport.stack || ""}\n\nIdentifie la cause racine et propose une correction minimale. Réponds en JSON: {"cause": "...", "fix": "code corrigé complet"}`;
-
-  const analysisRaw = await ollamaAnalyze(analysisPrompt);
-
-  let analysis = { cause: "Unknown", fix: currentCode };
+  // 1. Analyse cause racine + extraction règle en un seul appel
+  const combinedPrompt = `Code du skill:\n${currentCode}\n\nBug: ${bugReport.error}\n\nRéponds en JSON:
+{
+  "cause": "cause racine en 1 phrase",
+  "fix": "code corrigé complet",
+  "rule": "règle générale à retenir (1 phrase)"
+}`;
+  const raw = await ollamaAnalyze(combinedPrompt);
+  let analysis = { cause: "Unknown", fix: currentCode, rule: "" };
   try {
-    const match = analysisRaw.match(/\{[\s\S]*\}/);
-    if (match) analysis = JSON.parse(match[0]);
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) analysis = { ...analysis, ...JSON.parse(match[0]) };
   } catch {}
 
   // 2. Application du patch
@@ -148,9 +157,8 @@ export async function evolveSkill(skillName, bugReport) {
   manifest.last_evolved = new Date().toISOString();
   writeFileSync(join(skillDir, "manifest.json"), JSON.stringify(manifest, null, 2));
 
-  // 5. Extraction règle générale → Profil Patron
-  const rulePrompt = `Bug résolu dans ${skillName}: ${analysis.cause}\nQuelle règle générale retenir pour éviter ce bug à l'avenir? Réponse courte (1 phrase max).`;
-  const rule = await ollamaAnalyze(rulePrompt);
+  // 5. Extraction règle générale → Profil Patron (issue du prompt combiné)
+  const rule = analysis.rule;
 
   if (rule) {
     try {

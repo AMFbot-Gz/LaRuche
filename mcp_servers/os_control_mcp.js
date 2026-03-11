@@ -15,6 +15,20 @@ const ROOT = join(__dirname, "..");
 const SCREENSHOTS_DIR = join(ROOT, ".laruche/temp/screenshots");
 mkdirSync(SCREENSHOTS_DIR, { recursive: true });
 
+// Singleton robotjs — initialisé une seule fois au démarrage
+let robot = null;
+async function getRobot() {
+  if (!robot) {
+    try {
+      const mod = await import("@jitsi/robotjs");
+      robot = mod.default || mod;
+    } catch {
+      robot = null; // robotjs non disponible (CI, headless)
+    }
+  }
+  return robot;
+}
+
 // Calibration state
 let calibration = { width: 1920, height: 1080, dpiScale: 1.0 };
 
@@ -43,7 +57,8 @@ server.tool(
   {},
   async () => {
     try {
-      const { default: robot } = await import("robotjs");
+      const robot = await getRobot();
+      if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
       const screen = robot.getScreenSize();
       calibration = {
         width: screen.width,
@@ -73,7 +88,8 @@ server.tool(
   { relX: z.number().min(0).max(100), relY: z.number().min(0).max(100), ms: z.number().optional() },
   async ({ relX, relY, ms = 300 }) => {
     try {
-      const { default: robot } = await import("robotjs");
+      const robot = await getRobot();
+      if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
       const { x, y } = toAbs(relX, relY);
       const steps = Math.round(ms / 8);
       const start = robot.getMousePos();
@@ -105,7 +121,8 @@ server.tool(
   },
   async ({ relX, relY, button = "left", double = false }) => {
     try {
-      const { default: robot } = await import("robotjs");
+      const robot = await getRobot();
+      if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
       const { x, y } = toAbs(relX, relY);
       robot.moveMouse(x, y);
       await sleep(50);
@@ -126,7 +143,8 @@ server.tool(
   { text: z.string(), wpm: z.number().optional() },
   async ({ text, wpm = 65 }) => {
     try {
-      const { default: robot } = await import("robotjs");
+      const robot = await getRobot();
+      if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
       for (const char of text) {
         const delay = (60000 / (wpm * 5)) * (1 + gaussian(0, 0.3));
         robot.typeString(char);
@@ -144,7 +162,8 @@ server.tool(
   { direction: z.enum(["up", "down", "left", "right"]), amount: z.number().optional() },
   async ({ direction, amount = 3 }) => {
     try {
-      const { default: robot } = await import("robotjs");
+      const robot = await getRobot();
+      if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
       const pos = robot.getMousePos();
       const dy = direction === "down" ? -amount : direction === "up" ? amount : 0;
       const dx = direction === "right" ? amount : direction === "left" ? -amount : 0;
@@ -161,7 +180,8 @@ server.tool(
   { region: z.string().optional() },
   async () => {
     try {
-      const { default: robot } = await import("robotjs");
+      const robot = await getRobot();
+      if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
       const bitmap = robot.screen.capture();
       const timestamp = Date.now();
       const path = join(SCREENSHOTS_DIR, `shot_${timestamp}.png`);
@@ -191,7 +211,8 @@ server.tool(
   {},
   async () => {
     try {
-      const { default: robot } = await import("robotjs");
+      const robot = await getRobot();
+      if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
       const pos = robot.getMousePos();
       return { content: [{ type: "text", text: JSON.stringify({ success: true, ...pos }) }] };
     } catch (e) {

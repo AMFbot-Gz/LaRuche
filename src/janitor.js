@@ -5,6 +5,7 @@
 
 import cron from "node-cron";
 import { readdirSync, rmSync, statSync, mkdirSync } from "fs";
+import { rm } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execa } from "execa";
@@ -37,17 +38,15 @@ const TEMP_PURGE_MIN = parseInt(process.env.TEMP_PURGE_INTERVAL_MIN || "10");
 
 mkdirSync(TEMP_DIR, { recursive: true });
 
-function purgeTemp() {
+async function purgeTemp() {
   try {
     const files = readdirSync(TEMP_DIR);
-    let purged = 0;
-    for (const f of files) {
-      if (f === ".gitkeep") continue;
-      try {
-        rmSync(join(TEMP_DIR, f), { recursive: true });
-        purged++;
-      } catch {}
-    }
+    // Suppression parallèle
+    const deletePromises = files
+      .filter(f => f !== ".gitkeep")
+      .map(f => rm(join(TEMP_DIR, f), { recursive: true, force: true }).then(() => 1).catch(() => 0));
+    const results = await Promise.all(deletePromises);
+    const purged = results.reduce((a, b) => a + b, 0);
     if (purged > 0) logger.info(`Purge /temp: ${purged} fichier(s) supprimé(s)`);
   } catch (e) {
     logger.error(`purgeTemp: ${e.message}`);
@@ -122,8 +121,7 @@ cron.schedule("0 0 * * *", () => {
 cron.schedule("0 3 * * *", async () => {
   logger.info("Purge snapshots anciens...");
   try {
-    // Via rollback_mcp directement
-    const { readdirSync, statSync, rmSync } = await import("fs");
+    // Utilise readdirSync/statSync/rmSync déjà importés en haut du fichier
     const ROLLBACK_DIR = join(ROOT, ".laruche/rollback");
     const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const dirs = readdirSync(ROLLBACK_DIR).filter((d) => {

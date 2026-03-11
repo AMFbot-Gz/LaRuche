@@ -34,6 +34,19 @@ function saveProfile(profile) {
   writeFileSync(PROFILE_PATH, JSON.stringify(profile, null, 2));
 }
 
+// Singleton ChromaDB — client et collection initialisés une seule fois
+let _chromaClient = null;
+let _collection = null;
+
+async function getCollection() {
+  if (!_collection) {
+    const { ChromaClient } = await import("chromadb");
+    _chromaClient = new ChromaClient({ path: VAULT_DIR });
+    _collection = await _chromaClient.getOrCreateCollection({ name: "laruche_experiences" });
+  }
+  return _collection;
+}
+
 const server = new McpServer({ name: "laruche-vault", version: "3.0.0" });
 
 server.tool(
@@ -47,9 +60,7 @@ server.tool(
   },
   async ({ task, result, success, skillUsed, platform }) => {
     try {
-      const { ChromaClient } = await import("chromadb");
-      const client = new ChromaClient({ path: VAULT_DIR });
-      const collection = await client.getOrCreateCollection({ name: "laruche_experiences" });
+      const collection = await getCollection();
 
       const id = `exp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const doc = `Task: ${task} | Result: ${result.substring(0, 200)} | Platform: ${platform || "unknown"}`;
@@ -85,9 +96,7 @@ server.tool(
   { query: z.string(), k: z.number().optional(), onlySuccess: z.boolean().optional() },
   async ({ query, k = 5, onlySuccess = true }) => {
     try {
-      const { ChromaClient } = await import("chromadb");
-      const client = new ChromaClient({ path: VAULT_DIR });
-      const collection = await client.getOrCreateCollection({ name: "laruche_experiences" });
+      const collection = await getCollection();
 
       const count = await collection.count();
       if (count === 0) return { content: [{ type: "text", text: JSON.stringify({ results: [] }) }] };

@@ -48,14 +48,16 @@ export async function getAvailableModels() {
 }
 
 /**
- * Charge la config des rôles depuis .laruche/config.json
+ * Charge la config des rôles depuis .laruche/config.json (cache TTL 5min)
  */
+let _roleConfigCache = null;
+let _roleConfigTs = 0;
 function loadRoleConfig() {
-  try {
-    return JSON.parse(readFileSync(CONFIG_PATH, "utf-8")).models || {};
-  } catch {
-    return {};
-  }
+  if (_roleConfigCache && Date.now() - _roleConfigTs < 300000) return _roleConfigCache;
+  try { _roleConfigCache = JSON.parse(readFileSync(CONFIG_PATH, "utf-8")).models || {}; }
+  catch { _roleConfigCache = {}; }
+  _roleConfigTs = Date.now();
+  return _roleConfigCache;
 }
 
 /**
@@ -117,10 +119,13 @@ export async function autoDetectRoles() {
 }
 
 function findBest(available, candidates) {
+  // O(n) — une seule Map lookup au lieu de 2 passes Array
+  const availableSet = new Map(available.map(m => [m, true]));
+  const availableNames = new Map(available.map(m => [m.split(":")[0], m]));
   for (const candidate of candidates) {
-    if (available.some((m) => m === candidate || m.startsWith(candidate.split(":")[0]))) {
-      return available.find((m) => m === candidate || m.startsWith(candidate.split(":")[0]));
-    }
+    if (availableSet.has(candidate)) return candidate;
+    const base = candidate.split(":")[0];
+    if (availableNames.has(base)) return availableNames.get(base);
   }
   return available[0] || "llama3.2:3b";
 }
@@ -166,8 +171,10 @@ export async function ask(prompt, options = {}) {
     timeout = 60000,
   } = options;
 
+  // Un seul appel autoDetectRoles() — évite le double appel quand role est fourni
+  const roles = await autoDetectRoles();
   const model = role
-    ? (await autoDetectRoles())[role] || (await route(task))
+    ? roles[role] || roles.worker
     : await route(task);
 
   try {

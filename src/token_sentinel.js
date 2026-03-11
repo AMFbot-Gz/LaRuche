@@ -16,6 +16,10 @@ const db = new Database(join(ROOT, ".laruche/shadow-errors.db"));
 
 const COST_ALERT_USD = parseFloat(process.env.COST_ALERT_USD || "2.00");
 
+// Cache coûts journaliers (TTL 30s)
+let _dailyCostCache = null;
+let _dailyCostTs = 0;
+
 // Coûts approximatifs par million de tokens
 const MODEL_COSTS = {
   "llama3.2:3b": { in: 0, out: 0 },      // Local = gratuit
@@ -44,6 +48,7 @@ async function alertTelegram(msg) {
 }
 
 export function trackUsage(model, tokensIn, tokensOut, missionId = null) {
+  _dailyCostCache = null; // Invalider cache
   const costs = MODEL_COSTS[model] || { in: 0, out: 0 };
   const cost = (tokensIn / 1_000_000) * costs.in + (tokensOut / 1_000_000) * costs.out;
 
@@ -62,11 +67,20 @@ export function getMissionCost(missionId) {
 }
 
 export function getDailyCost() {
+  if (_dailyCostCache !== null && Date.now() - _dailyCostTs < 30000) {
+    return _dailyCostCache;
+  }
   const today = new Date().toISOString().split("T")[0];
-  const row = db
-    .prepare("SELECT SUM(cost_usd) as total FROM token_usage WHERE timestamp LIKE ?")
-    .get(`${today}%`);
-  return row?.total || 0;
+  try {
+    const row = db
+      .prepare("SELECT SUM(cost_usd) as total FROM token_usage WHERE timestamp LIKE ?")
+      .get(`${today}%`);
+    _dailyCostCache = row?.total || 0;
+  } catch {
+    _dailyCostCache = 0;
+  }
+  _dailyCostTs = Date.now();
+  return _dailyCostCache;
 }
 
 export async function checkAlert(missionCost) {

@@ -45,14 +45,22 @@ if (!ADMIN_ID) { logger.error("ADMIN_TELEGRAM_ID manquant"); process.exit(1); }
 
 // ─── Mission log simple (JSON) ────────────────────────────────────────────────
 const MISSIONS_FILE = join(ROOT, ".laruche/missions.json");
+
+// Cache mémoire missions
+let _missionsCache = null;
 function loadMissions() {
-  try { return JSON.parse(readFileSync(MISSIONS_FILE, "utf-8")); } catch { return []; }
+  if (_missionsCache) return _missionsCache;
+  try { _missionsCache = JSON.parse(readFileSync(MISSIONS_FILE, "utf-8")); }
+  catch { _missionsCache = []; }
+  return _missionsCache;
 }
 function saveMission(entry) {
-  const missions = loadMissions();
-  missions.unshift(entry);
-  writeFileSync(MISSIONS_FILE, JSON.stringify(missions.slice(0, 200), null, 2));
+  _missionsCache = [entry, ...(loadMissions())].slice(0, 200);
+  writeFileSync(MISSIONS_FILE, JSON.stringify(_missionsCache, null, 2));
 }
+
+// Helper découpe de message Telegram (max 4096 chars, marge de sécurité)
+const splitMsg = (text, max = 3900) => text.match(new RegExp(`.{1,${max}}`, "g")) || [text];
 
 // ─── HUD WebSocket ────────────────────────────────────────────────────────────
 let hudClients = new Set();
@@ -74,6 +82,7 @@ async function butterflyLoop(command, ctx) {
   logger.info(`🦋 Mission: ${command.substring(0, 80)}`);
   hud({ type: "mission_start", command: command.substring(0, 100) });
 
+  // Un seul appel autoDetectRoles() par mission — le résultat est passé en paramètre
   const roles = await autoDetectRoles();
 
   try {
@@ -216,7 +225,7 @@ bot.command("mission", async (ctx) => {
   if (!text) { await ctx.reply("Usage: /mission <votre commande>"); return; }
   try {
     const result = await butterflyLoop(text, ctx);
-    for (const chunk of (result.match(/.{1,3900}/g) || [result])) {
+    for (const chunk of splitMsg(result)) {
       await ctx.reply(chunk, { parse_mode: "Markdown" });
     }
   } catch (e) { await ctx.reply(`❌ ${e.message}`); }
@@ -266,7 +275,7 @@ bot.on("text", async (ctx) => {
   if (ctx.message.text.startsWith("/")) return;
   try {
     const result = await butterflyLoop(ctx.message.text, ctx);
-    for (const chunk of (result.match(/.{1,3900}/g) || [result])) {
+    for (const chunk of splitMsg(result)) {
       await ctx.reply(chunk, { parse_mode: "Markdown" });
     }
   } catch (e) { await ctx.reply(`❌ ${e.message}`); }
@@ -279,7 +288,42 @@ logger.info("╚═════════════════════�
 
 await printRoles();
 
-bot.launch({ dropPendingUpdates: true });
-logger.info("🤖 Bot Telegram OSS actif");
+// Voler la session Telegram — force le timeout=0 pour couper le long-poll précédent
+async function stealSession() {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    // Appel getUpdates avec timeout=0 coupe immédiatement le long-poll concurrent
+    await fetch(`https://api.telegram.org/bot${token}/getUpdates?timeout=0&offset=-1`);
+    await new Promise(r => setTimeout(r, 2000)); // 2s pour que Telegram libère
+    logger.info("🔑 Session Telegram libérée");
+  } catch {}
+}
+
+// Lancement avec vol de session + retry sur 409
+async function launchWithRetry(maxAttempts = 3, delayMs = 5000) {
+  await stealSession();
+  for (let i = 1; i <= maxAttempts; i++) {
+    try {
+      await bot.launch({ dropPendingUpdates: true });
+      logger.info("🤖 Bot Telegram OSS actif");
+      return;
+    } catch (e) {
+      if (e.response?.error_code === 409 && i < maxAttempts) {
+        logger.warn(`409 Conflict — retry ${i}/${maxAttempts} dans ${delayMs / 1000}s...`);
+        await stealSession();
+        await new Promise(r => setTimeout(r, delayMs));
+      } else {
+        throw e;
+      }
+    }
+  }
+}
+
+await launchWithRetry();
+
+// Pre-warm: déclencher auto-détection des rôles au démarrage (évite latence premier message)
+autoDetectRoles().then((roles) => {
+  logger.info(`✅ Rôles préchauffés: ${Object.values(roles).join(", ")}`);
+}).catch(() => {});
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));

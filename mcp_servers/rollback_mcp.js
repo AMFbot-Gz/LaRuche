@@ -77,19 +77,16 @@ server.tool(
 
 server.tool("listSnapshots", {}, async () => {
   try {
-    const snapshots = readdirSync(ROLLBACK_DIR)
-      .filter((d) => {
-        try { return statSync(join(ROLLBACK_DIR, d)).isDirectory(); } catch { return false; }
+    const dirs = readdirSync(ROLLBACK_DIR).filter((d) => {
+      try { return statSync(join(ROLLBACK_DIR, d)).isDirectory(); } catch { return false; }
+    });
+    const snapshots = await Promise.all(
+      dirs.map(async (d) => {
+        try { return JSON.parse(readFileSync(join(ROLLBACK_DIR, d, "manifest.json"), "utf-8")); }
+        catch { return null; }
       })
-      .map((d) => {
-        try {
-          return JSON.parse(readFileSync(join(ROLLBACK_DIR, d, "manifest.json"), "utf-8"));
-        } catch { return null; }
-      })
-      .filter(Boolean)
-      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-
-    return { content: [{ type: "text", text: JSON.stringify({ success: true, snapshots }) }] };
+    );
+    return { content: [{ type: "text", text: JSON.stringify({ success: true, snapshots: snapshots.filter(Boolean).sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)) }) }] };
   } catch (e) {
     return { content: [{ type: "text", text: JSON.stringify({ success: false, error: e.message }) }] };
   }
@@ -123,18 +120,20 @@ server.tool(
     try {
       const cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000;
       const dirs = readdirSync(ROLLBACK_DIR);
-      let purged = 0;
 
-      for (const dir of dirs) {
+      const purgePromises = dirs.map(async (dir) => {
         const fullPath = join(ROLLBACK_DIR, dir);
         try {
           const stat = statSync(fullPath);
           if (stat.isDirectory() && stat.mtimeMs < cutoff) {
             rmSync(fullPath, { recursive: true });
-            purged++;
+            return 1;
           }
         } catch {}
-      }
+        return 0;
+      });
+      const results = await Promise.all(purgePromises);
+      const purged = results.reduce((a, b) => a + b, 0);
 
       return { content: [{ type: "text", text: JSON.stringify({ success: true, purged }) }] };
     } catch (e) {

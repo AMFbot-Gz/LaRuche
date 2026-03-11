@@ -19,6 +19,17 @@ const PORT = 8080;
 
 const db = new Database(join(ROOT, ".laruche/shadow-errors.db"), { readonly: true });
 
+// Cache registry.json avec invalidation toutes les 30s
+let _registryCache = null;
+let _registryCacheTs = 0;
+function getCachedRegistry() {
+  if (_registryCache && Date.now() - _registryCacheTs < 30000) return _registryCache;
+  try { _registryCache = JSON.parse(readFileSync(join(ROOT, ".laruche/registry.json"), "utf-8")); }
+  catch { _registryCache = { skills: [] }; }
+  _registryCacheTs = Date.now();
+  return _registryCache;
+}
+
 // ─── HTTP Server + Router ─────────────────────────────────────────────────────
 const server = createServer((req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -68,12 +79,15 @@ const server = createServer((req, res) => {
   if (url.pathname === "/api/costs" && req.method === "GET") {
     try {
       const today = new Date().toISOString().split("T")[0];
-      const daily = db.prepare(
-        "SELECT SUM(cost_usd) as total FROM token_usage WHERE timestamp LIKE ?"
-      ).get(`${today}%`);
-      const total = db.prepare("SELECT SUM(cost_usd) as total FROM token_usage").get();
+      // Une seule requête au lieu de 2 SELECT séquentiels
+      const row = db.prepare(`
+        SELECT
+          SUM(CASE WHEN timestamp LIKE ? THEN cost_usd ELSE 0 END) as daily,
+          SUM(cost_usd) as total
+        FROM token_usage
+      `).get(`${today}%`);
       res.writeHead(200);
-      res.end(JSON.stringify({ daily: daily?.total || 0, total: total?.total || 0 }));
+      res.end(JSON.stringify({ daily: row?.daily || 0, total: row?.total || 0 }));
     } catch (e) {
       res.writeHead(500);
       res.end(JSON.stringify({ error: e.message }));
@@ -83,14 +97,8 @@ const server = createServer((req, res) => {
 
   // GET /api/skills
   if (url.pathname === "/api/skills" && req.method === "GET") {
-    try {
-      const registry = JSON.parse(readFileSync(join(ROOT, ".laruche/registry.json"), "utf-8"));
-      res.writeHead(200);
-      res.end(JSON.stringify(registry));
-    } catch (e) {
-      res.writeHead(200);
-      res.end(JSON.stringify({ skills: [] }));
-    }
+    res.writeHead(200);
+    res.end(JSON.stringify(getCachedRegistry()));
     return;
   }
 
@@ -175,18 +183,27 @@ const server = createServer((req, res) => {
 const wss = new WebSocketServer({ server });
 const clients = new Set();
 
+// Singleton WebSocket proxy vers HUD — évite N connexions pour N clients dashboard
+let hudProxy = null;
+
+function getHudProxy() {
+  if (hudProxy && hudProxy.readyState === WebSocket.OPEN) return hudProxy;
+  hudProxy = new WebSocket("ws://localhost:9001");
+  hudProxy.on("message", (data) => {
+    // Diffuser à TOUS les clients dashboard connectés
+    broadcast(JSON.parse(data.toString()));
+  });
+  hudProxy.on("close", () => { hudProxy = null; setTimeout(getHudProxy, 3000); });
+  hudProxy.on("error", () => {});
+  return hudProxy;
+}
+// Initialiser la connexion HUD au démarrage du serveur
+getHudProxy();
+
 wss.on("connection", (ws) => {
   clients.add(ws);
   ws.send(JSON.stringify({ type: "connected", ts: Date.now() }));
   ws.on("close", () => clients.delete(ws));
-
-  // Proxy HUD events
-  const hudWs = new WebSocket("ws://localhost:9001");
-  hudWs.on("message", (data) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(data.toString());
-  });
-  hudWs.on("error", () => {});
-  ws.on("close", () => hudWs.close());
 });
 
 function broadcast(event) {

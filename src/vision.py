@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import os
+import re
 from typing import Optional
 
 import aiohttp
@@ -27,6 +28,19 @@ RETINA_SCALE = float(os.getenv("RETINA_SCALE", "2.0"))
 
 # Cache pHash pour le Screen Fingerprinting
 _phash_cache: dict[str, dict] = {}
+MAX_PHASH_CACHE = 50
+
+# Session HTTP globale réutilisable (évite reconnexion à chaque appel)
+_http_session: aiohttp.ClientSession | None = None
+
+
+async def get_http_session() -> aiohttp.ClientSession:
+    global _http_session
+    if _http_session is None or _http_session.closed:
+        _http_session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=90)
+        )
+    return _http_session
 
 # Résolution logique macOS Retina
 LOGICAL_W = 1536
@@ -83,32 +97,34 @@ async def analyze_screen(question: str, region: Optional[tuple] = None) -> dict:
     logger.info(f"Analyse LLaVA: {question[:60]}")
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{OLLAMA_HOST}/api/generate",
-                json={
-                    "model": VISION_MODEL,
-                    "prompt": question,
-                    "images": [b64],
-                    "stream": False,
-                },
-                timeout=aiohttp.ClientTimeout(total=90),
-            ) as resp:
-                if resp.status != 200:
-                    return {"success": False, "error": f"Ollama HTTP {resp.status}"}
-                data = await resp.json()
-                result = {
-                    "success": True,
-                    "response": data.get("response", ""),
-                    "phash": phash,
-                }
+        session = await get_http_session()
+        async with session.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={
+                "model": VISION_MODEL,
+                "prompt": question,
+                "images": [b64],
+                "stream": False,
+            },
+        ) as resp:
+            if resp.status != 200:
+                return {"success": False, "error": f"Ollama HTTP {resp.status}"}
+            data = await resp.json()
+            result = {
+                "success": True,
+                "response": data.get("response", ""),
+                "phash": phash,
+            }
 
-                # Mise en cache
-                if phash not in _phash_cache:
-                    _phash_cache[phash] = {}
-                _phash_cache[phash][question] = result
+            # Mise en cache (LRU simple, max MAX_PHASH_CACHE entrées)
+            if phash not in _phash_cache:
+                if len(_phash_cache) >= MAX_PHASH_CACHE:
+                    oldest = next(iter(_phash_cache))
+                    del _phash_cache[oldest]
+                _phash_cache[phash] = {}
+            _phash_cache[phash][question] = result
 
-                return result
+            return result
 
     except asyncio.TimeoutError:
         return {"success": False, "error": "Timeout LLaVA (90s)"}
@@ -134,7 +150,6 @@ async def find_element(description: str) -> Optional[dict]:
 
     response = result.get("response", "")
     try:
-        import re
         json_match = re.search(r"\{[^{}]*\}", response)
         if json_match:
             data = json.loads(json_match.group())

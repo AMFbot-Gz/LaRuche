@@ -26,6 +26,20 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2:3b")
 MAX_WORKERS = int(os.getenv("MAX_KIMI_INSTANCES", "10"))
 WORKER_TIMEOUT = 30  # secondes
 
+# Session HTTP globale partagée par tous les workers
+_global_session: aiohttp.ClientSession | None = None
+
+
+async def get_session() -> aiohttp.ClientSession:
+    global _global_session
+    if _global_session is None or _global_session.closed:
+        connector = aiohttp.TCPConnector(limit=MAX_WORKERS + 2, keepalive_timeout=30)
+        _global_session = aiohttp.ClientSession(
+            connector=connector,
+            timeout=aiohttp.ClientTimeout(total=WORKER_TIMEOUT),
+        )
+    return _global_session
+
 
 @dataclass
 class WorkerTask:
@@ -86,17 +100,16 @@ async def _call_ollama(prompt: str, model: str = None, temperature: float = 0.0)
     """Appel async Ollama avec timeout."""
     model = model or OLLAMA_MODEL
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                f"{OLLAMA_HOST}/api/generate",
-                json={"model": model, "prompt": prompt, "stream": False,
-                      "options": {"temperature": temperature}},
-                timeout=aiohttp.ClientTimeout(total=WORKER_TIMEOUT),
-            ) as resp:
-                if resp.status != 200:
-                    raise Exception(f"Ollama HTTP {resp.status}")
-                data = await resp.json()
-                return data.get("response", "")
+        session = await get_session()
+        async with session.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={"model": model, "prompt": prompt, "stream": False,
+                  "options": {"temperature": temperature}},
+        ) as resp:
+            if resp.status != 200:
+                raise Exception(f"Ollama HTTP {resp.status}")
+            data = await resp.json()
+            return data.get("response", "")
     except asyncio.TimeoutError:
         raise Exception(f"Timeout ({WORKER_TIMEOUT}s)")
 
@@ -182,26 +195,14 @@ async def chain_of_thought(raw_results: list[WorkerResult]) -> str:
     if not draft:
         return "Aucun résultat exploitable."
 
-    # Critique
-    critique_prompt = f"""Voici des résultats de plusieurs agents:
-{draft}
+    # Synthèse directe en un seul appel (plus rapide qu'un pipeline critique+refactor)
+    task = next((r.description for r in raw_results if r.success), None)
+    synthesis_prompt = f"""Synthétise ces résultats en une réponse finale claire:
+{draft[:2000]}
 
-Identifie: 1) Incohérences 2) Informations manquantes 3) Améliorations possibles.
-Sois concis."""
-
-    critique = await _call_ollama(critique_prompt, temperature=0.3)
-
-    # Refactor final
-    refactor_prompt = f"""Résultats bruts:
-{draft}
-
-Critique:
-{critique}
-
-Synthétise en une réponse finale claire, complète et cohérente.
-Garde seulement l'essentiel."""
-
-    final = await _call_ollama(refactor_prompt, temperature=0.1)
+Objectif: {task if task else "mission"}
+Réponse concise et directe."""
+    final = await _call_ollama(synthesis_prompt, temperature=0.2)
     return final
 
 
