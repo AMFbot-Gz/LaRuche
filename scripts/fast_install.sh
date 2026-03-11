@@ -176,6 +176,22 @@ else
   fi
 fi
 
+# ─── STEP 7b: TypeScript build (génère dist/ pour agentLoop + provider) ───────────────
+step "7b" "Compilation TypeScript (agentLoop, provider, toolRouter)"
+if [[ "$DRY_RUN" == true ]]; then
+  ok "Skipped in dry-run"
+else
+  if command -v npx >/dev/null 2>&1; then
+    if npx tsc --outDir dist/ --skipLibCheck 2>/dev/null; then
+      ok "TypeScript compilé → dist/"
+    else
+      warn "TypeScript: erreurs de compilation (non bloquant — agentBridge utilise le fallback stub)"
+    fi
+  else
+    warn "npx introuvable — compilation TypeScript ignorée"
+  fi
+fi
+
 # ─── STEP 8: Smoke test ───────────────────────────────────────────────────────
 step 8 "Smoke test"
 if [[ "$DRY_RUN" == true ]]; then
