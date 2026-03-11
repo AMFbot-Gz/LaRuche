@@ -1,0 +1,18 @@
+{
+  "identity": {
+    "timezone": "Europe/Paris",
+    "active_hours": { "start": "09:00", "end": "02:00" },
+    "language_pref": "FR avec termes techniques EN"
+  },
+  "work_style": {
+    "file_organization": "strict",
+    "temp_purge_interval": 60,
+    "notification_level": "minimal",
+    "confirmation_threshold": 2.00
+  },
+  "learned_rules": [],
+  "platform_knowledge": {},
+  "session_count": 0,
+  "total_tasks_completed": 0,
+  "last_updated": null
+}

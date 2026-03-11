@@ -1,0 +1,35 @@
+# Secrets
+.env
+credentials.json
+
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# LaRuche data
+.laruche/temp/
+.laruche/rollback/
+.laruche/logs/
+vault/
+*.db
+*.db-journal
+
+# Build
+dist/
+build/
+.vite/
+out/
+
+# System
+.DS_Store
+Thumbs.db
+*.log
+*.bak
+
+# Screenshots
+screenshots/
+*.png
+*.jpg

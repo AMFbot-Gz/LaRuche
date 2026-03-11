@@ -1,0 +1,55 @@
+{
+  "name": "laruche-bot",
+  "version": "3.0.0",
+  "description": "Ghost Swarm Autonomous Agent — LaRuche v3.0 SINGULARITY",
+  "main": "src/queen.js",
+  "type": "module",
+  "scripts": {
+    "start": "pm2 start ecosystem.config.js --env production",
+    "dev": "node src/queen.js",
+    "hud": "electron hud/main.js",
+    "dash": "cd dashboard && vite",
+    "test": "jest --coverage",
+    "install:full": "node scripts/fast_install.js",
+    "status": "pm2 status",
+    "logs": "pm2 logs laruche-queen"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "telegraf": "^4.16.0",
+    "robotjs": "^0.9.0",
+    "uiohook-napi": "^1.5.0",
+    "axios": "^1.7.0",
+    "better-sqlite3": "^9.0.0",
+    "node-cron": "^3.0.0",
+    "tiktoken": "^1.0.0",
+    "peerjs": "^1.5.0",
+    "qrcode": "^1.5.0",
+    "diff-match-patch": "^1.0.5",
+    "systeminformation": "^5.22.0",
+    "pm2": "^5.3.0",
+    "electron": "^28.0.0",
+    "dotenv": "^16.0.0",
+    "ws": "^8.0.0",
+    "chromadb": "^1.8.0",
+    "zod": "^3.23.8",
+    "hono": "^4.11.7",
+    "@hono/node-server": "^1.12.0",
+    "chalk": "^5.3.0",
+    "boxen": "^8.0.1",
+    "ora": "^8.1.1",
+    "execa": "^9.5.1",
+    "commander": "^12.0.0",
+    "winston": "^3.13.0",
+    "fs-extra": "^11.2.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "supertest": "^7.0.0",
+    "playwright": "^1.40.0",
+    "@types/node": "^20.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
