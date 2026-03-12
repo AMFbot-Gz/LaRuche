@@ -65,6 +65,9 @@ export function startStandaloneServer(deps) {
         "DELETE /api/skills/:name",
         "GET  /api/config",
         "POST /api/mission/:id/cancel",
+        "POST /api/agent",
+        "POST /api/orchestrate",
+        "GET  /api/agents/:name",
         "POST /api/process/restart",
       ],
     })

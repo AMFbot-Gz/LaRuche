@@ -6,12 +6,16 @@
 import { callLLM } from "../llm/callLLM.js";
 import { getAllSkills, getRelevantSkills, formatSkillsForPrompt } from "../skills/skillLoader.js";
 import { routeByRules } from './intentRouter.js';
+import { buildCompactContext } from '../context/agentIdentity.js';
 
 // ─── Prompt système planner ────────────────────────────────────────────────────────────
 function buildPlannerPrompt(intent, skills) {
   const skillList = formatSkillsForPrompt(skills);
-  return `Planner LaRuche macOS. Skills: ${skillList}
+  const ctx = buildCompactContext("worker");
+  return `${ctx}
+Skills disponibles: ${skillList}
 Règles: JSON seul. Steps atomiques. Skills exacts de la liste. Valeurs par défaut si ambigu.
+Pour le GUI: utiliser find_element/smart_click plutôt que des coordonnées.
 Format: {"goal":"objectif","confidence":0.9,"steps":[{"skill":"nom","params":{}}]}
 Intention: "${intent}"
 JSON:`;

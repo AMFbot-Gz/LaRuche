@@ -369,6 +369,88 @@ export function createMissionsRoutes(app, deps) {
     return c.json({ success: true });
   });
 
+  // ─── POST /api/agent ─────────────────────────────────────────────────────────
+  // Lance un agent nommé directement: { agent: "architect", task: "..." }
+  app.post("/api/agent", async (c) => {
+    let body;
+    try { body = await c.req.json(); } catch {
+      return c.json({ error: "Body JSON invalide" }, 400);
+    }
+    const { agent = "worker", task } = body || {};
+    if (!task?.trim()) return c.json({ error: "Champ 'task' requis" }, 400);
+
+    try {
+      const { runAgent } = await import("../agents/agentOrchestrator.js");
+      const hudEvents = [];
+      const result = await runAgent(agent, task.trim(), {
+        hudFn: (ev) => {
+          hudEvents.push(ev);
+          broadcastHUD({ ...ev, agent });
+        },
+      });
+      return c.json({ success: result.status !== "error", agent, task, result, events: hudEvents });
+    } catch (e) {
+      return c.json({ success: false, error: e.message }, 500);
+    }
+  });
+
+  // ─── POST /api/orchestrate ───────────────────────────────────────────────────
+  // Lance N agents en parallèle: { mission: "...", maxParallel: 4 }
+  app.post("/api/orchestrate", async (c) => {
+    let body;
+    try { body = await c.req.json(); } catch {
+      return c.json({ error: "Body JSON invalide" }, 400);
+    }
+    const { mission, maxParallel = 4, forceKimi = false, useAgentLoop = false } = body || {};
+    if (!mission?.trim()) return c.json({ error: "Champ 'mission' requis" }, 400);
+
+    const entry = createMissionEntry(mission.trim());
+    broadcastHUD({ type: "mission_start", command: mission.slice(0, 100), missionId: entry.id });
+
+    // Exécution asynchrone
+    import("../agents/agentOrchestrator.js").then(({ orchestrate }) => {
+      updateMission(entry.id, { status: "running" });
+      return orchestrate(mission.trim(), {
+        maxParallel,
+        forceKimi,
+        useAgentLoop,
+        hudFn: (ev) => {
+          broadcastHUD({ ...ev, missionId: entry.id });
+          appendMissionEvent(entry.id, ev);
+        },
+      });
+    }).then(result => {
+      updateMission(entry.id, {
+        status: result.success ? "success" : "partial",
+        result: result.response,
+        duration: result.duration,
+        completedAt: new Date().toISOString(),
+      });
+      broadcastHUD({ type: "mission_complete", duration: result.duration, missionId: entry.id });
+    }).catch(err => {
+      logger.error(`[API] Orchestrate ${entry.id} erreur: ${err.message}`);
+      updateMission(entry.id, { status: "error", error: err.message, completedAt: new Date().toISOString() });
+    });
+
+    return c.json({ missionId: entry.id, status: "pending" }, 202);
+  });
+
+  // ─── GET /api/agents/:name ────────────────────────────────────────────────────
+  // Détails d'une config d'agent YAML
+  app.get("/api/agents/:name", async (c) => {
+    const name = c.req.param("name");
+    try {
+      const { readFileSync, existsSync } = await import("fs");
+      const { join } = await import("path");
+      const configPath = join(process.cwd(), `config/agents/${name}.yaml`);
+      if (!existsSync(configPath)) return c.json({ error: "Agent config introuvable" }, 404);
+      const raw = readFileSync(configPath, "utf-8");
+      return c.json({ name, config: raw });
+    } catch (e) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
   // ─── POST /api/process/restart ───────────────────────────────────────────────
   app.post("/api/process/restart", async (c) => {
     // On broadcaste l'event puis on schedule un restart dans 1s

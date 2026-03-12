@@ -12,6 +12,7 @@ import { randomUUID } from "crypto";
 import { parse as parseYaml } from "../utils/yaml.js";
 import { LLMProvider } from "../llm/provider.js";
 import { ToolRouter } from "../tools/toolRouter.js";
+import { buildSystemPrompt } from "../context/agentIdentity.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "../../");
@@ -68,6 +69,7 @@ async function requestHITL(toolName, args, threshold, timeoutMs) {
 
 class AgentLoop {
   constructor(agentName) {
+    this.agentName = agentName;
     this.sessionId = randomUUID();
     this.messages = [];
     this.config = this.loadConfig(agentName);
@@ -88,17 +90,11 @@ class AgentLoop {
   }
 
   buildSystemPrompt() {
-    return `You are an autonomous AI agent part of the LaRuche swarm.
-Agent Identity: ${this.config.description || 'LaRuche Agent'}
-Core Soul: ${this.config.soul || 'Be helpful and autonomous'}
-Current Time: ${new Date().toISOString()}
-Working Directory: ${ROOT}
-
-RULES:
-1. Use tools whenever necessary to achieve the goal.
-2. If a tool fails, analyze the error and try a different approach.
-3. Keep thoughts concise but clear.
-4. You are 100% local, no external APIs unless via tools.`.trim();
+    // Dériver le rôle depuis le nom de l'agent (operator → operator, computer-use → computer-use)
+    const role = this.agentName || "operator";
+    // Contexte additionnel depuis la config YAML
+    const extra = this.config.soul ? `Âme de cet agent: ${this.config.soul}` : "";
+    return buildSystemPrompt(role, extra);
   }
 
   async run(userInput, opts = {}) {

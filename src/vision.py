@@ -175,12 +175,49 @@ async def watch_change(zone: Optional[tuple] = None, interval: float = 0.5, call
 
 
 if __name__ == "__main__":
-    async def test():
-        print("Test capture...")
-        b64, phash = capture_screen_b64()
-        print(f"pHash: {phash}")
-        print(f"Base64 length: {len(b64)}")
-        result = await analyze_screen("Décris ce que tu vois à l'écran.")
-        print(f"LLaVA: {result.get('response', '')[:200]}")
+    import argparse
+    import sys
 
-    asyncio.run(test())
+    parser = argparse.ArgumentParser(description="LaRuche Vision Engine CLI")
+    parser.add_argument("--fn", default="test", help="Fonction à appeler")
+    parser.add_argument("--args", default="{}", help="Arguments JSON")
+
+    cli_args = parser.parse_args()
+    fn_name = cli_args.fn
+    fn_args = {}
+    try:
+        fn_args = json.loads(cli_args.args)
+    except json.JSONDecodeError:
+        pass
+
+    async def run_fn():
+        if fn_name == "analyze_screen":
+            question = fn_args.get("question", "Décris ce que tu vois.")
+            region = fn_args.get("region", None)
+            if isinstance(region, str):
+                try:
+                    region = tuple(json.loads(region))
+                except Exception:
+                    region = None
+            result = await analyze_screen(question, region)
+            print(json.dumps(result))
+
+        elif fn_name == "find_element":
+            description = fn_args.get("description", fn_args.get("query", ""))
+            result = await find_element(description)
+            if result:
+                print(json.dumps({**result, "found": True}))
+            else:
+                print(json.dumps({"found": False, "description": description}))
+
+        elif fn_name == "capture":
+            b64, phash = capture_screen_b64()
+            print(json.dumps({"success": True, "phash": phash, "b64_length": len(b64)}))
+
+        else:
+            # Mode test
+            b64, phash = capture_screen_b64()
+            result = await analyze_screen("Décris brièvement ce que tu vois.")
+            print(json.dumps({"phash": phash, "response": result.get("response", "")[:200]}))
+
+    asyncio.run(run_fn())

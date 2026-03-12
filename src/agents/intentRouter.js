@@ -215,6 +215,59 @@ const RULES = [
     test: /(?:processus|process|ps\s+|qui\s+tourne)/i,
     build: () => steps(step('run_command', { command: 'ps aux | head -20' }, 'Processus actifs')),
   },
+
+  // ── Semantic Computer-Use : lire l'écran ───────────────────────────────────
+  {
+    test: /(?:lis?|lire?|analys|regarde|affiche|montre|donne|quels?\s+sont|qu['']est.ce\s+qui\s+(?:est|apparaît))\s+(?:sur\s+)?(?:l['']?écran|screen|interface|fenêtre)/i,
+    build: () => steps(step('screen_elements', {}, 'Lire éléments écran')),
+  },
+  {
+    test: /(?:éléments?|buttons?|boutons?|champs?)\s+(?:sur\s+)?(?:l['']?écran|screen|interface|de\s+l['']?app)/i,
+    build: () => steps(
+      step('screen_elements', {}, 'Éléments UI'),
+    ),
+  },
+
+  // ── Semantic Computer-Use : trouver un élément ─────────────────────────────
+  {
+    test: /(?:trouve?|cherche?|find|locate|où\s+est)\s+(?:le\s+|la\s+|l['']?|un\s+|une\s+)?(?:bouton|button|champ|field|lien|link|case|checkbox|menu)?\s*["`'"]([^"`'"]{2,50})["`'"]/i,
+    build: (m) => steps(step('find_element', { query: m[1].trim() }, `Trouver: ${m[1]}`)),
+  },
+  {
+    test: /(?:trouve?|cherche?|find|locate)\s+(?:l['']?élément|the\s+element)\s+(.{3,50})/i,
+    build: (m) => steps(step('find_element', { query: m[1].trim() }, `Trouver: ${m[1]}`)),
+  },
+
+  // ── Semantic Computer-Use : cliquer par label ──────────────────────────────
+  {
+    test: /(?:clique?|click|appuie?|presse?)\s+(?:sur\s+)?(?:le\s+|la\s+|l['']?)?(?:bouton\s+)?["`'"]([^"`'"]{2,50})["`'"]/i,
+    build: (m) => steps(step('smart_click', { query: m[1].trim() }, `Cliquer: ${m[1]}`)),
+  },
+  {
+    test: /(?:clique?|click)\s+(?:sur\s+)?(?:le\s+bouton\s+|la\s+)(.{3,40}?)(?:\s*$|\s+(?:dans|de|du))/i,
+    build: (m) => steps(step('smart_click', { query: m[1].trim() }, `Cliquer: ${m[1]}`)),
+  },
+
+  // ── Semantic Computer-Use : attendre élément ───────────────────────────────
+  {
+    test: /(?:attends?|wait)\s+(?:que?\s+)?(?:l['']?élément|the\s+element|que?\s+)?["`'"]([^"`'"]{2,50})["`'"](?:\s+apparaisse?|appear)/i,
+    build: (m) => steps(step('wait_for_element', { query: m[1].trim(), timeout: 10 }, `Attendre: ${m[1]}`)),
+  },
+
+  // ── Semantic Computer-Use : lire arbre AX ─────────────────────────────────
+  {
+    test: /(?:arbre\s+ax|accessibility\s+tree|ax\s+tree|éléments?\s+accessibility)/i,
+    build: () => steps(step('accessibility_reader', {}, 'Arbre AX')),
+  },
+
+  // ── Screenshot + analyse sémantique ───────────────────────────────────────
+  {
+    test: /(?:capture|screenshot)\s+(?:et\s+)?(?:lis?|lire|analyse?|explique?|décris?)/i,
+    build: () => steps(
+      step('take_screenshot', {}, 'Screenshot'),
+      step('screen_elements', {}, 'Analyse éléments'),
+    ),
+  },
 ];
 
 // ─── Fonction principale ──────────────────────────────────────────────────────

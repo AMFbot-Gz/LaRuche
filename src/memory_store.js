@@ -39,11 +39,16 @@ function loadMemory() {
   return { raw, entries };
 }
 
-function appendMemory(entry) {
-  const mem = loadMemory();
-  const timestamp = new Date().toISOString().split("T")[0];
+// Mutex léger anti-race condition pour les écritures MEMORY.md
+let _writeLock = Promise.resolve();
 
-  const newBlock = `
+function appendMemory(entry) {
+  // Chaîner les écritures pour éviter les race conditions concurrent
+  _writeLock = _writeLock.then(() => {
+    const mem = loadMemory();
+    const timestamp = new Date().toISOString().split("T")[0];
+
+    const newBlock = `
 ---
 \`\`\`yaml
 id: mem_${Date.now()}
@@ -56,9 +61,12 @@ confidence: ${entry.confidence || "medium"}
 ${entry.content}
 `;
 
-  // fix: \n escapé au lieu d'un LF littéral dans la string
-  const currentContent = mem.raw || "# LaRuche Memory\n\n";
-  writeFileSync(MEMORY_PATH, currentContent + newBlock);
+    const currentContent = mem.raw || "# LaRuche Memory\n\n";
+    writeFileSync(MEMORY_PATH, currentContent + newBlock);
+  }).catch(err => {
+    console.error("[memory_store] Erreur écriture MEMORY.md:", err.message);
+  });
+  return _writeLock;
 }
 
 // --- Extraction de leçon via LLM ---------------------------------------------

@@ -141,7 +141,39 @@ export async function route(task, hint = null) {
 }
 
 /**
- * Appel Ollama avec routing automatique
+ * Appel cloud Anthropic (fallback si Ollama indisponible)
+ * Nécessite ANTHROPIC_API_KEY dans .env
+ */
+async function askAnthropic(prompt, { model = "claude-haiku-4-5-20251001", temperature = 0.3, timeout = 60000 } = {}) {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY manquant");
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: parseInt(process.env.LLM_NUM_PREDICT || "700"),
+      temperature,
+      messages: [{ role: "user", content: prompt }],
+    }),
+    signal: AbortSignal.timeout(timeout),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Anthropic HTTP ${res.status}: ${err.slice(0, 100)}`);
+  }
+  const data = await res.json();
+  const text = data.content?.[0]?.text || "";
+  return { text, model: `anthropic/${model}`, success: true };
+}
+
+/**
+ * Appel Ollama avec routing automatique + fallback cloud
  */
 export async function ask(prompt, options = {}) {
   const {
@@ -150,6 +182,7 @@ export async function ask(prompt, options = {}) {
     temperature = 0.3,
     timeout = 60000,
     num_predict = null,
+    cloudFallback = process.env.CLOUD_FALLBACK === "true",
   } = options;
 
   const roles = await autoDetectRoles();
@@ -184,6 +217,15 @@ export async function ask(prompt, options = {}) {
     const data = await res.json();
     return { text: data.response || "", model, success: true };
   } catch (e) {
+    // Fallback cloud Anthropic si Ollama échoue et que la clé est disponible
+    if (cloudFallback || process.env.ANTHROPIC_API_KEY) {
+      try {
+        console.warn(`[model_router] Ollama "${model}" échoué (${e.message.slice(0, 50)}) → fallback Anthropic`);
+        return await askAnthropic(prompt, { temperature, timeout });
+      } catch (cloudErr) {
+        return { text: "", model: `anthropic/fallback`, success: false, error: `Ollama: ${e.message} | Anthropic: ${cloudErr.message}` };
+      }
+    }
     return { text: "", model, success: false, error: e.message };
   }
 }

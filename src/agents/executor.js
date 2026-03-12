@@ -17,19 +17,25 @@ const ROOT = join(__dirname, '../..');
 
 // Timeouts par skill (ms)
 const SKILL_TIMEOUTS = {
-  take_screenshot: 6000,
-  open_app:        5000,
-  goto_url:        8000,
-  type_text:       4000,
-  press_key:       3000,
-  press_enter:     3000,
-  run_command:     12000,
-  run_shell:       12000,
-  http_fetch:      15000,
-  read_file:       3000,
-  list_big_files:  8000,
-  summarize_project: 10000,
-  _default:        10000,
+  take_screenshot:       6000,
+  open_app:              5000,
+  goto_url:              8000,
+  type_text:             4000,
+  press_key:             3000,
+  press_enter:           3000,
+  run_command:           12000,
+  run_shell:             12000,
+  http_fetch:            15000,
+  read_file:             3000,
+  list_big_files:        8000,
+  summarize_project:     10000,
+  // Semantic computer-use skills
+  accessibility_reader:  15000,
+  find_element:          15000,
+  smart_click:           15000,
+  screen_elements:       20000,
+  wait_for_element:      30000,  // timeout Python géré en interne
+  _default:              10000,
 };
 
 // Skill alternatives si le premier échoue
