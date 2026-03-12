@@ -1,72 +1,100 @@
-name: 🐛 Bug Report
-description: Signaler un bug dans LaRuche
-title: "[Bug] "
-labels: ["bug", "needs-triage"]
+name: "🐝 Bug Report"
+description: Signaler un bug dans LaRuche — plus c'est précis, plus vite on fixe !
+title: "🐝 [Bug] "
+labels: ["bogue", "needs-triage"]
 
 body:
   - type: markdown
     attributes:
       value: |
-        Merci de prendre le temps de signaler ce bug ! Plus vos informations sont précises, plus vite nous pouvons corriger.
+        ## 🐝 Merci de signaler ce bug !
+        Plus vos informations sont précises, plus vite on peut corriger.
+        Avant de poster, vérifiez que le bug n'est pas déjà reporté dans les [issues existantes](https://github.com/AMFbot-Gz/LaRuche/issues).
 
   - type: input
     id: version
     attributes:
-      label: Version de LaRuche
-      placeholder: "3.2.0"
+      label: "📌 Version de LaRuche"
+      placeholder: "ex: 3.3.0"
     validations:
       required: true
 
   - type: dropdown
-    id: os
+    id: component
     attributes:
-      label: Système d'exploitation
+      label: "🛠️ Composant concerné"
       options:
-        - macOS
-        - Ubuntu / Debian
-        - Windows 10/11
-        - Autre Linux
-        - Autre
-    validations:
-      required: true
-
-  - type: input
-    id: node
-    attributes:
-      label: Version Node.js
-      placeholder: "v20.11.0"
+        - "🐝 Orchestrateur (queen_oss.js)"
+        - "🧠 Pipeline agents (agentLoop/intentPipeline)"
+        - "🔧 MCP servers"
+        - "📊 Dashboard (React/Vite)"
+        - "🖥️ HUD (Electron)"
+        - "📲 Bot Telegram"
+        - "🔗 LLM / providers"
+        - "💎 Skills"
+        - "✨ Autre"
     validations:
       required: true
 
   - type: textarea
     id: description
     attributes:
-      label: Description du bug
-      placeholder: "Quand j'envoie /mission sur Telegram, le bot ne répond pas..."
+      label: "📋 Description du bug"
+      description: "Décrivez clairement ce qui se passe."
+      placeholder: "Quand je lance une mission avec /mission \"...\", l'agent plante avec l'erreur..."
     validations:
       required: true
 
   - type: textarea
-    id: steps
+    id: reproduce
     attributes:
-      label: Étapes pour reproduire
+      label: "🔄 Étapes pour reproduire"
       placeholder: |
         1. Lancer `laruche start`
-        2. Envoyer `/mission "test"` sur Telegram
-        3. Observer l'erreur dans les logs
+        2. Envoyer `/mission "..."` sur Telegram
+        3. Voir l'erreur dans les logs
     validations:
       required: true
 
   - type: textarea
     id: expected
     attributes:
-      label: Comportement attendu
+      label: "✅ Comportement attendu"
+      placeholder: "L'agent aurait dû..."
     validations:
       required: true
 
   - type: textarea
     id: logs
     attributes:
-      label: Logs d'erreur
-      description: Collez les logs pertinents (`.laruche/logs/queen.log` ou `pm2 logs`)
+      label: "📝 Logs / erreurs"
+      description: "Collez les logs pertinents. `laruche dev` pour avoir les logs verbose."
       render: shell
+
+  - type: input
+    id: os
+    attributes:
+      label: "🖥️ OS & environnement"
+      placeholder: "ex: macOS 15, Ubuntu 22.04, GPU: RTX 3080, RAM: 32GB"
+
+  - type: dropdown
+    id: ollama_models
+    attributes:
+      label: "🧠 Modèles Ollama utilisés"
+      multiple: true
+      options:
+        - GLM-4.6
+        - Qwen3
+        - LLaMA 3.2
+        - LLaVA
+        - Autre
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: "📝 Checklist avant de poster"
+      options:
+        - label: "J'ai vérifié que ce bug n'existe pas déjà dans les issues"
+          required: true
+        - label: "J'ai inclu les logs pertinents"
+        - label: "J'ai testé avec la dernière version de LaRuche"
