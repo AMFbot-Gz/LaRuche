@@ -29,6 +29,10 @@ export async function callLLM(prompt, options = {}) {
     const t0 = Date.now();
     try {
       const result = await ask(prompt, { role, temperature });
+      // ask() n'émet pas d'exception — on vérifie explicitement success
+      if (!result.success) {
+        throw new Error(result.error || 'Ollama non disponible');
+      }
       logger.info('llm_call_success', {
         call_id: callId,
         mission_id,

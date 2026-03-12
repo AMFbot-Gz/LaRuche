@@ -50,24 +50,29 @@ if (!STANDALONE) {
 
 // ─── Missions (Cache + Persistance) ────────────────────────────────────────────────────────
 let _missionsCache = null;
+let _missionsCacheTs = 0;
+const MISSIONS_CACHE_TTL_MS = 30_000;
 
 export function loadMissions() {
-  if (_missionsCache) return _missionsCache;
+  if (_missionsCache && Date.now() - _missionsCacheTs < MISSIONS_CACHE_TTL_MS) return _missionsCache;
   try {
     const dir = join(ROOT, ".laruche");
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     _missionsCache = existsSync(MISSIONS_FILE)
       ? JSON.parse(readFileSync(MISSIONS_FILE, "utf-8"))
       : [];
+    _missionsCacheTs = Date.now();
   } catch (err) {
     logger.error(`Erreur chargement missions: ${err.message}`);
     _missionsCache = [];
+    _missionsCacheTs = Date.now();
   }
   return _missionsCache;
 }
 
 export function saveMission(entry) {
   _missionsCache = [entry, ...loadMissions()].slice(0, 200);
+  _missionsCacheTs = Date.now(); // Réinitialise le TTL après écriture
   try {
     writeFileSync(MISSIONS_FILE, JSON.stringify(_missionsCache, null, 2));
   } catch (err) {
@@ -92,28 +97,45 @@ export const safeParseJSON = (text, fallback) => {
 };
 
 // ─── HUD Service (WebSocket) ──────────────────────────────────────────────────────────────────
+// IMPORTANT: Le serveur WS est créé dans startHUDServer() (appelé en bas du fichier,
+// après la validation config) pour éviter un EADDRINUSE silencieux au démarrage.
 const hudClients = new Set();
-const wss = new WebSocketServer({ port: CONFIG.HUD_PORT });
+let wss = null;
 
-wss.on("connection", (ws, req) => {
-  // Auth optionnelle via ?token=... si HUD_TOKEN est défini
-  if (CONFIG.HUD_TOKEN) {
-    try {
-      const url = new URL(req.url, `http://localhost:${CONFIG.HUD_PORT}`);
-      const token = url.searchParams.get("token");
-      if (token !== CONFIG.HUD_TOKEN) {
+function startHUDServer() {
+  const server = new WebSocketServer({ port: CONFIG.HUD_PORT });
+
+  // Gestion explicite EADDRINUSE — évite un crash non catchable (event "error" non bindé)
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      logger.warn(`HUD: Port ${CONFIG.HUD_PORT} déjà utilisé — WebSocket HUD désactivé (HUD Electron déjà actif?)`);
+    } else {
+      logger.error(`HUD: Erreur WebSocketServer: ${err.message}`);
+    }
+  });
+
+  server.on("connection", (ws, req) => {
+    // Auth optionnelle via ?token=... si HUD_TOKEN est défini
+    if (CONFIG.HUD_TOKEN) {
+      try {
+        const url = new URL(req.url, `http://localhost:${CONFIG.HUD_PORT}`);
+        const token = url.searchParams.get("token");
+        if (token !== CONFIG.HUD_TOKEN) {
+          ws.close(4001, "Unauthorized");
+          return;
+        }
+      } catch {
         ws.close(4001, "Unauthorized");
         return;
       }
-    } catch {
-      ws.close(4001, "Unauthorized");
-      return;
     }
-  }
-  hudClients.add(ws);
-  logger.info(`HUD: Client connecté (${hudClients.size})`);
-  ws.on("close", () => hudClients.delete(ws));
-});
+    hudClients.add(ws);
+    logger.info(`HUD: Client connecté (${hudClients.size})`);
+    ws.on("close", () => hudClients.delete(ws));
+  });
+
+  return server;
+}
 
 export function broadcastHUD(event) {
   const msg = JSON.stringify({ ...event, ts: Date.now() });
@@ -266,6 +288,10 @@ export async function runMission(command, missionId) {
 logger.info("╔══════════════════════════════════════════╗");
 logger.info(`║ 🐝 LaRuche OSS v4.1 — ${STANDALONE ? "Standalone    " : "Telegram mode"} ║`);
 logger.info("╚══════════════════════════════════════════╝");
+
+// Démarrage du serveur HUD WebSocket (après validation config, avec gestion EADDRINUSE)
+wss = startHUDServer();
+logger.info(`📡 HUD WebSocket en écoute sur port ${CONFIG.HUD_PORT}`);
 
 await printRoles();
 

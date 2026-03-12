@@ -19,7 +19,24 @@ const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 function loadMemory() {
   if (!existsSync(MEMORY_PATH)) return { raw: "", entries: [] };
   const raw = readFileSync(MEMORY_PATH, "utf-8");
-  return { raw };
+  // Parser les blocs ```yaml...``` comme entries pour cohérence avec le cas "fichier absent"
+  const entries = [];
+  const blockRe = /```yaml\n([\s\S]*?)```/g;
+  let m;
+  while ((m = blockRe.exec(raw)) !== null) {
+    try {
+      const obj = {};
+      for (const line of m[1].split('\n')) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx === -1) continue;
+        const k = line.slice(0, colonIdx).trim();
+        const v = line.slice(colonIdx + 1).trim();
+        if (k) obj[k] = v;
+      }
+      if (obj.id) entries.push(obj);
+    } catch { /* bloc malformé ignoré */ }
+  }
+  return { raw, entries };
 }
 
 function appendMemory(entry) {

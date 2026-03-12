@@ -6,6 +6,7 @@
 
 import { plan, isComputerUseIntent } from "./planner.js";
 import { getAllSkills } from "../skills/skillLoader.js";
+import { ask } from "../model_router.js";
 import { execa } from "execa";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
@@ -178,15 +179,11 @@ async function tryAutoCorrect(failedStep, errorMsg, hudFn) {
 
   const prompt = `Un step a échoué. Skill: ${failedStep.skill} Params: ${JSON.stringify(failedStep.params)} Erreur: ${errorMsg} Écran: ${visionContext.slice(0, 300)} Propose un step JSON corrigé: {"skill": "nom_skill", "params": {...}}`;
   try {
-    const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: "llama3.2:3b", prompt, stream: false, options: { temperature: 0.1 } }),
-      signal: AbortSignal.timeout(15000),
-    });
-    const data = await res.json();
-    const match = data.response?.match(/\{[\s\S]*\}/);
-    if (match) return JSON.parse(match[0]);
+    const result = await ask(prompt, { role: 'worker', temperature: 0.1, timeout: 15000 });
+    if (result.success && result.text) {
+      const match = result.text.match(/\{[\s\S]*\}/);
+      if (match) return JSON.parse(match[0]);
+    }
   } catch { /* fallback */ }
   return null;
 }
