@@ -20,6 +20,7 @@ import { logger } from "./utils/logger.js";
 import { startCronRunner } from "./cron_runner.js";
 import { isStandaloneMode, startStandaloneServer } from "./modes/standalone.js";
 import { updateMission, appendMissionEvent } from "./api/missions.js";
+import { runIntentPipeline, isComputerUseIntent } from "./agents/intentPipeline.js";
 
 dotenv.config();
 
@@ -281,7 +282,89 @@ Réponse directe, sans répéter les étapes.`;
 }
 
 export async function runMission(command, missionId) {
+  // Routage : computer-use → MCP pipeline, sinon → butterfly loop LLM
+  if (isComputerUseIntent(command)) {
+    return runComputerUseMission(command, missionId);
+  }
   return butterflyLoop(command, async () => {}, missionId);
+}
+
+/**
+ * Exécute une mission computer-use via runIntentPipeline (MCP + skills réels).
+ * Met à jour la mission en temps réel (events, status, result).
+ */
+async function runComputerUseMission(command, missionId) {
+  logger.info(`🖥️ Computer-use détecté → IntentPipeline`, { mission_id: missionId });
+
+  // hudFn : broadcast HUD + append event dans le store API
+  const hudFn = (event) => {
+    broadcastHUD({ ...event, missionId });
+    if (missionId) appendMissionEvent(missionId, event);
+  };
+
+  const onPlanReady = (planResult) => {
+    if (missionId) updateMission(missionId, {
+      status: "running",
+      events: [],  // réinitialisé par appendMissionEvent ensuite
+    });
+    hudFn({ type: "plan_ready", tasks: planResult.steps, goal: planResult.goal });
+  };
+
+  const onStepDone = (stepIdx, total, step, result) => {
+    hudFn({
+      type: "step_done",
+      step: stepIdx,
+      total,
+      skill: step.skill,
+      success: result?.success !== false,
+    });
+  };
+
+  try {
+    const result = await runIntentPipeline(command, {
+      hudFn,
+      onPlanReady,
+      onStepDone,
+      useVision: process.env.LARUCHE_MODE !== "low",
+      usePlaywright: false,  // désactivé par défaut — évite crash si Playwright absent
+    });
+
+    const summary = result.success
+      ? `✅ Mission accomplie en ${(result.duration / 1000).toFixed(1)}s\n\n` +
+        result.steps.map((s, i) => `${i + 1}. ${s.step.skill}: ${s.result?.success ? '✓' : '✗'}`).join('\n')
+      : `⚠️ Partiellement complété (${result.steps.filter(s => s.result?.success !== false).length}/${result.steps.length} étapes)\n\n` +
+        (result.error || 'Certaines étapes ont échoué');
+
+    saveMission({
+      id: missionId,
+      command,
+      status: result.success ? "success" : "partial",
+      duration: result.duration,
+      result: summary,
+      ts: new Date().toISOString(),
+    });
+
+    if (missionId) updateMission(missionId, {
+      status: result.success ? "success" : "partial",
+      result: summary,
+      duration: result.duration,
+      completedAt: new Date().toISOString(),
+    });
+
+    broadcastHUD({ type: "mission_complete", duration: result.duration, missionId });
+    return summary;
+
+  } catch (err) {
+    logger.error(`Computer-use pipeline erreur: ${err.message}`, { mission_id: missionId });
+    saveMission({ id: missionId, command, status: "error", error: err.message, ts: new Date().toISOString() });
+    if (missionId) updateMission(missionId, {
+      status: "error",
+      error: err.message,
+      completedAt: new Date().toISOString(),
+    });
+    broadcastHUD({ type: "mission_error", error: err.message, missionId });
+    throw err;
+  }
 }
 
 // ─── Démarrage ───────────────────────────────────────────────────────────────────────────────
