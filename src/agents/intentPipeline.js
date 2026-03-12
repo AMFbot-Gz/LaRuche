@@ -1,24 +1,20 @@
 /**
- * intentPipeline.js - Pipeline intention -> plan -> exécution avec vision loop
+ * intentPipeline.js — Pipeline intention -> plan -> exécution avec vision loop v3
  *
- * Améliorations v2:
- * - Vision entre chaque step (validation + détection d'erreurs)
- * - Auto-correction sur échec (screenshot -> analyse -> replan step)
- * - Playwright comme MCP prioritaire, AppleScript en fallback
- * - Chargement dynamique des skills depuis workspace/skills/
+ * v3: loadDynamicSkills() remplacé par loadSkillHandlers() via getAllSkills() (skillLoader.js)
  */
 
 import { plan, isComputerUseIntent } from "./planner.js";
+import { getAllSkills } from "../skills/skillLoader.js";
 import { execa } from "execa";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { readdirSync, existsSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "../../");
 const OLLAMA_HOST = process.env.OLLAMA_HOST || "http://localhost:11434";
 
-// --- MCP caller direct with Retry logic --------------------------------------
+// --- MCP caller with Retry ---------------------------------------------------
 
 async function callMCP(serverFile, toolName, args = {}, timeout = 20000) {
   const rpcRequest = JSON.stringify({
@@ -29,20 +25,18 @@ async function callMCP(serverFile, toolName, args = {}, timeout = 20000) {
   });
 
   let lastError = null;
-  const maxRetries = 3;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+  for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       const { stdout, stderr } = await execa("node", [join(ROOT, "mcp_servers", serverFile)], {
         input: rpcRequest,
         cwd: ROOT,
-        timeout: timeout * attempt, // Incremental timeout
+        timeout: timeout * attempt,
         reject: false,
       });
 
       if (!stdout?.trim()) {
-         if (stderr) throw new Error(stderr);
-         throw new Error("Empty MCP response");
+        if (stderr) throw new Error(stderr);
+        throw new Error("Empty MCP response");
       }
 
       const parsed = JSON.parse(stdout.trim());
@@ -50,20 +44,15 @@ async function callMCP(serverFile, toolName, args = {}, timeout = 20000) {
 
       const text = parsed.result?.content?.[0]?.text;
       return text ? JSON.parse(text) : (parsed.result || { success: true });
-
     } catch (e) {
       lastError = e.message;
-      console.warn(`[MCP Retry] ${toolName} attempt ${attempt} failed: ${lastError}`);
-      if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 1000 * attempt)); // Exponential backoff
-      }
+      if (attempt < 3) await new Promise(r => setTimeout(r, 1000 * attempt));
     }
   }
-
-  return { success: false, error: `Failed after ${maxRetries} attempts: ${lastError}` };
+  return { success: false, error: `Failed after 3 attempts: ${lastError}` };
 }
 
-// --- Vision entre les steps ---------------------------------------------------
+// --- Vision loop -------------------------------------------------------------
 
 async function visionValidate(question) {
   try {
@@ -72,7 +61,6 @@ async function visionValidate(question) {
       "--fn", "analyze_screen",
       "--args", JSON.stringify({ question }),
     ], { cwd: ROOT, timeout: 15000, reject: false });
-
     const result = JSON.parse(stdout);
     return result?.response || "";
   } catch {
@@ -83,69 +71,64 @@ async function visionValidate(question) {
 async function takeScreenshot() {
   const pwResult = await callMCP("playwright_mcp.js", "pw.screenshot", {}, 8000);
   if (pwResult?.success && pwResult?.path) return pwResult.path;
-
   const osResult = await callMCP("os_control_mcp.js", "screenshot", {}, 8000);
   return osResult?.path || null;
 }
 
-// --- Chargement dynamique des skills -----------------------------------------
+// --- Chargement des skill handlers via skillLoader ---------------------------
 
-let _dynamicSkills = null;
-let _dynamicSkillsTs = 0;
+let _skillHandlers = null;
+let _skillHandlersTs = 0;
 
-async function loadDynamicSkills() {
-  if (_dynamicSkills && Date.now() - _dynamicSkillsTs < 30000) return _dynamicSkills;
+async function loadSkillHandlers() {
+  if (_skillHandlers && Date.now() - _skillHandlersTs < 30000) return _skillHandlers;
 
-  const skillsDir = join(ROOT, "workspace/skills");
+  const allSkills = getAllSkills();
   const handlers = {};
 
-  if (existsSync(skillsDir)) {
-    for (const name of readdirSync(skillsDir)) {
-      const indexPath = join(skillsDir, name, "index.js");
-      if (!existsSync(indexPath)) continue;
-
-      try {
-        const mod = await import(`${indexPath}?t=${Date.now()}`);
-        if (typeof mod.run === "function") {
-          handlers[name] = (params) => mod.run(params);
-        }
-      } catch { /* skip broken skills */ }
-    }
+  for (const skill of allSkills) {
+    if (!skill.indexPath) continue;
+    try {
+      const mod = await import(`${skill.indexPath}?t=${Date.now()}`);
+      if (typeof mod.run === "function") {
+        handlers[skill.name] = (params) => mod.run(params);
+      }
+    } catch { /* skip broken skills */ }
   }
 
-  _dynamicSkills = handlers;
-  _dynamicSkillsTs = Date.now();
+  _skillHandlers = handlers;
+  _skillHandlersTs = Date.now();
   return handlers;
 }
 
 // --- Handlers builtin --------------------------------------------------------
 
 const BUILTIN_HANDLERS = {
-  open_safari: (p) => callMCP("browser_mcp.js", "os.openApp", { app: "Safari" }),
-  go_to_youtube: (p) => callMCP("playwright_mcp.js", "pw.goto", { url: "https://www.youtube.com" }),
-  search_youtube: (p) => callMCP("playwright_mcp.js", "pw.searchYouTube", { query: p.query || "relaxing music" }),
+  open_safari:       (p) => callMCP("browser_mcp.js", "os.openApp", { app: "Safari" }),
+  go_to_youtube:     (p) => callMCP("playwright_mcp.js", "pw.goto", { url: "https://www.youtube.com" }),
+  search_youtube:    (p) => callMCP("playwright_mcp.js", "pw.searchYouTube", { query: p.query || "relaxing music" }),
   play_first_result: (p) => callMCP("playwright_mcp.js", "pw.clickFirstYoutubeResult", {}),
-  open_app: (p) => callMCP("browser_mcp.js", "os.openApp", { app: p.app || "Safari" }),
-  focus_app: (p) => callMCP("browser_mcp.js", "os.focusApp", { app: p.app || "Safari" }),
-  goto_url: (p) => callMCP("playwright_mcp.js", "pw.goto", { url: p.url }),
-  click_element: (p) => callMCP("playwright_mcp.js", "pw.click", { selector: p.selector }),
-  fill_field: (p) => callMCP("playwright_mcp.js", "pw.fill", { selector: p.selector, text: p.text }),
-  press_key: (p) => callMCP("playwright_mcp.js", "pw.press", { key: p.key || "Enter" }),
-  take_screenshot: (p) => callMCP("playwright_mcp.js", "pw.screenshot", {}),
-  extract_text: (p) => callMCP("playwright_mcp.js", "pw.extract", { selector: p.selector }),
-  run_command: (p) => callMCP("terminal_mcp.js", "execSafe", { command: p.command }),
-  type_text: (p) => callMCP("os_control_mcp.js", "typeText", { text: p.text || p.query || "" }),
-  press_enter: (p) => callMCP("browser_mcp.js", "browser.pressEnter", {}),
+  open_app:          (p) => callMCP("browser_mcp.js", "os.openApp", { app: p.app || "Safari" }),
+  focus_app:         (p) => callMCP("browser_mcp.js", "os.focusApp", { app: p.app || "Safari" }),
+  goto_url:          (p) => callMCP("playwright_mcp.js", "pw.goto", { url: p.url }),
+  click_element:     (p) => callMCP("playwright_mcp.js", "pw.click", { selector: p.selector }),
+  fill_field:        (p) => callMCP("playwright_mcp.js", "pw.fill", { selector: p.selector, text: p.text }),
+  press_key:         (p) => callMCP("playwright_mcp.js", "pw.press", { key: p.key || "Enter" }),
+  take_screenshot:   (p) => callMCP("playwright_mcp.js", "pw.screenshot", {}),
+  extract_text:      (p) => callMCP("playwright_mcp.js", "pw.extract", { selector: p.selector }),
+  run_command:       (p) => callMCP("terminal_mcp.js", "execSafe", { command: p.command }),
+  type_text:         (p) => callMCP("os_control_mcp.js", "typeText", { text: p.text || p.query || "" }),
+  press_enter:       (p) => callMCP("browser_mcp.js", "browser.pressEnter", {}),
 };
 
-// --- Exécution d'un step ------------------------------------------------------
+// --- Exécution d'un step ----------------------------------------------------
 
 async function executeStep(step, hudFn, useVision = false) {
   const { skill, params = {} } = step;
   hudFn?.({ type: "task_start", task: `${skill}(${JSON.stringify(params).slice(0, 50)})` });
 
-  const dynamicSkills = await loadDynamicSkills();
-  const handler = dynamicSkills[skill] || BUILTIN_HANDLERS[skill];
+  const dynamicHandlers = await loadSkillHandlers();
+  const handler = dynamicHandlers[skill] || BUILTIN_HANDLERS[skill];
 
   if (!handler) {
     const e = { success: false, error: `Skill non trouvé: ${skill}` };
@@ -168,8 +151,7 @@ async function executeStep(step, hudFn, useVision = false) {
     if (visionCheck) {
       result._vision = visionCheck.slice(0, 200);
       const errorSignals = ["erreur", "error", "failed", "impossible", "introuvable", "not found", "popup", "alerte"];
-      const hasError = errorSignals.some(s => visionCheck.toLowerCase().includes(s));
-      if (hasError) {
+      if (errorSignals.some(s => visionCheck.toLowerCase().includes(s))) {
         result._vision_warning = true;
         hudFn?.({ type: "thinking", agent: "Vision", thought: `⚠️ ${visionCheck.slice(0, 100)}` });
       }
@@ -181,11 +163,10 @@ async function executeStep(step, hudFn, useVision = false) {
   return result;
 }
 
-// --- Auto-correction sur échec ------------------------------------------------
+// --- Auto-correction ---------------------------------------------------------
 
 async function tryAutoCorrect(failedStep, errorMsg, hudFn) {
   hudFn?.({ type: "thinking", agent: "Self-Correct", thought: `Tentative correction: ${failedStep.skill}` });
-
   const screenshotPath = await takeScreenshot();
   let visionContext = "";
   if (screenshotPath) {
@@ -193,11 +174,9 @@ async function tryAutoCorrect(failedStep, errorMsg, hudFn) {
       `Le skill "${failedStep.skill}" a échoué avec l'erreur: "${errorMsg}". Que vois-tu à l'écran? Que faut-il faire pour corriger?`
     );
   }
-
   if (!visionContext) return null;
 
-  const prompt = `Un step a échoué dans LaRuche. Skill échoué: ${failedStep.skill} Paramètres: ${JSON.stringify(failedStep.params)} Erreur: ${errorMsg} Observation écran: ${visionContext.slice(0, 300)} Propose un step JSON corrigé: {"skill": "nom_skill", "params": {...}}`;
-
+  const prompt = `Un step a échoué. Skill: ${failedStep.skill} Params: ${JSON.stringify(failedStep.params)} Erreur: ${errorMsg} Écran: ${visionContext.slice(0, 300)} Propose un step JSON corrigé: {"skill": "nom_skill", "params": {...}}`;
   try {
     const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method: "POST",
@@ -212,7 +191,7 @@ async function tryAutoCorrect(failedStep, errorMsg, hudFn) {
   return null;
 }
 
-// --- Pipeline principal --------------------------------------------------------
+// --- Pipeline principal ------------------------------------------------------
 
 export async function runIntentPipeline(intent, {
   hudFn, onPlanReady, onStepDone,
@@ -255,12 +234,12 @@ export async function runIntentPipeline(intent, {
     onStepDone?.(i + 1, planResult.steps.length, step, result);
     if (result?.success === false) allOk = false;
 
-    const pauseMs = useVision ? 800 : 500;
-    if (i < planResult.steps.length - 1) await new Promise(r => setTimeout(r, pauseMs));
+    if (i < planResult.steps.length - 1)
+      await new Promise(r => setTimeout(r, useVision ? 800 : 500));
   }
 
   const duration = Date.now() - startTime;
-  hudFn?.({ type: "mission_complete", duration, cost: 0 });
+  hudFn?.({ type: "mission_complete", duration });
 
   return { success: allOk, goal: planResult.goal, confidence: planResult.confidence, steps: results, model: planResult.model, duration };
 }
