@@ -62,52 +62,40 @@ function loadRoleConfig() {
 
 /**
  * Détection automatique du meilleur modèle pour chaque rôle
- * Basé sur les modèles réellement installés sur Ollama
  */
 export async function autoDetectRoles() {
   const available = await getAvailableModels();
   const config = loadRoleConfig();
 
   const roles = {
-    // L1 — Stratège (raisonnement profond, planification)
     strategist: config.strategist || findBest(available, [
       "glm-4.7", "glm-4.6", "glm-4.6:cloud",
       "gpt-oss:120b-cloud", "gpt-oss:120b",
       "qwen3:72b", "llama3.1:70b",
       "llama3:latest", "llama3.2:latest",
     ]),
-
-    // L2 — Architecte (code, debug, skill factory)
     architect: config.architect || findBest(available, [
       "qwen3-coder:480b-cloud", "qwen3-coder:32b",
       "qwen3-coder:14b", "qwen3-coder",
       "deepseek-coder:33b", "codellama:34b",
       "llama3.2:3b",
     ]),
-
-    // L3 — Ouvrières (micro-tâches rapides, parallèle)
     worker: config.worker || findBest(available, [
       "llama3.2:3b", "llama3.2:latest",
       "minimax-m2:cloud", "minimax-m2",
       "phi3:mini", "phi3",
       "llama3:latest",
     ]),
-
-    // L4 — Vision (analyse écran, UI detection)
     vision: config.vision || findBest(available, [
       "llama3.2-vision:latest", "llama3.2-vision",
       "qwen3-vl:235b-cloud", "qwen3-vl",
       "llava:latest", "llava:13b", "llava",
       "moondream:latest", "moondream",
     ]),
-
-    // L4b — Vision légère (screenshot rapide)
     visionFast: config.visionFast || findBest(available, [
       "moondream:latest", "moondream",
       "llava:7b", "llava:latest", "llava",
     ]),
-
-    // Synthèse / Chain-of-Thought
     synthesizer: config.synthesizer || findBest(available, [
       "glm-4.6", "glm-4.6:cloud",
       "gpt-oss:20b-cloud", "gpt-oss:20b",
@@ -119,7 +107,6 @@ export async function autoDetectRoles() {
 }
 
 function findBest(available, candidates) {
-  // O(n) — une seule Map lookup au lieu de 2 passes Array
   const availableSet = new Map(available.map(m => [m, true]));
   const availableNames = new Map(available.map(m => [m.split(":")[0], m]));
   for (const candidate of candidates) {
@@ -140,22 +127,16 @@ export async function route(task, hint = null) {
 
   const t = task.toLowerCase();
 
-  // Détection code
   if (/\bcode\b|script|function|\bfonction\b|debug|refactor|\bprogramme\b|implement|\bclass\b|\bapi\b|fix\s+bug|écris\s+un|génère\s+un\s+script|python|javascript|typescript|bash|sql|algorithme/.test(t)) {
     return roles.architect;
   }
-
-  // Détection vision/screen
   if (/vision|écran|screen|image|pixel|clic|bouton|interface|ui|screenshot/.test(t)) {
     return roles.vision;
   }
-
-  // Détection stratégie/planification
   if (/plan|stratégie|décompose|analyse|architecture|mission|objectif/.test(t)) {
     return roles.strategist;
   }
 
-  // Default: worker rapide
   return roles.worker;
 }
 
@@ -167,11 +148,9 @@ export async function ask(prompt, options = {}) {
     role = null,
     task = prompt,
     temperature = 0.3,
-    stream = false,
     timeout = 60000,
   } = options;
 
-  // Un seul appel autoDetectRoles() — évite le double appel quand role est fourni
   const roles = await autoDetectRoles();
   const model = role
     ? roles[role] || roles.worker
@@ -181,15 +160,9 @@ export async function ask(prompt, options = {}) {
     const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model,
-        prompt,
-        stream: false,
-        options: { temperature },
-      }),
+      body: JSON.stringify({ model, prompt, stream: false, options: { temperature } }),
       signal: AbortSignal.timeout(timeout),
     });
-
     if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
     const data = await res.json();
     return { text: data.response || "", model, success: true };
@@ -210,12 +183,7 @@ export async function* stream(prompt, options = {}) {
   const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model,
-      prompt,
-      stream: true,
-      options: { temperature },
-    }),
+    body: JSON.stringify({ model, prompt, stream: true, options: { temperature } }),
   });
 
   if (!res.body) return;
@@ -253,4 +221,14 @@ export async function printRoles() {
     console.log(`  ${(icons[role] || role).padEnd(22)} → ${model}`);
   }
   console.log();
+}
+
+/**
+ * Pour les tests uniquement — injecte directement dans le cache des modèles disponibles.
+ * Permet de tester le routing sans Ollama réel.
+ * @param {string[]} models
+ */
+export function _setAvailableModelsCache(models) {
+  _availableModels = models;
+  _lastFetch = Date.now();
 }
