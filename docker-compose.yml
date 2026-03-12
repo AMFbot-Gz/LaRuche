@@ -39,6 +39,7 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - ADMIN_TELEGRAM_ID=${ADMIN_TELEGRAM_ID}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - QUEEN_MAX_PARALLEL=${QUEEN_MAX_PARALLEL:-3}
     command: sh -c "npm install --prefer-offline && node src/queen_oss.js"
     depends_on:
       ollama:

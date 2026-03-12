@@ -192,6 +192,6 @@ export function worldModelStats() {
 
 // Exposé pour les tests (reset du modèle en RAM sans toucher le disque)
 export function _resetForTests() {
-  _model = null;
+  _model = {};  // objet vide, évite la relecture depuis le disque
   _dirty = false;
 }

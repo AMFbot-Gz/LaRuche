@@ -27,6 +27,9 @@ import { subagentManager } from "./subagents/index.js";
 
 dotenv.config();
 
+// Init swarm au démarrage (non-bloquant)
+import('../swarm/index.js').then(({ initSwarm }) => initSwarm()).catch(() => {});
+
 // ─── Mode Autonome Total : HITL auto-approve en standalone ────────────────────
 if (!process.env.HITL_AUTO_APPROVE) {
   process.env.HITL_AUTO_APPROVE = 'true';  // exécution directe, zéro blocage HITL
@@ -387,6 +390,10 @@ async function runComputerUseMission(command, missionId) {
       saveMission({ id: missionId, command, status: "success", duration: result.duration, result: summary, ts: new Date().toISOString() });
       if (missionId) updateMission(missionId, { status: "success", result: summary, duration: result.duration, completedAt: new Date().toISOString() });
       broadcastHUD({ type: "mission_complete", duration: result.duration, missionId });
+      // Mémoire épisodique — enregistre l'expérience de la mission
+      import('../memory/episodic/index.js').then(({ storeEpisode }) => {
+        storeEpisode({ mission: command, actions: [], outcome: 'success', rewardScore: 1.0, lessons: [] });
+      }).catch(() => {});
       return summary;
     }
 
@@ -408,23 +415,36 @@ async function runComputerUseMission(command, missionId) {
       }
     }
 
+    const finalStatus = result.success ? "success" : "partial";
     saveMission({
       id: missionId,
       command,
-      status: result.success ? "success" : "partial",
+      status: finalStatus,
       duration: result.duration,
       result: summary,
       ts: new Date().toISOString(),
     });
 
     if (missionId) updateMission(missionId, {
-      status: result.success ? "success" : "partial",
+      status: finalStatus,
       result: summary,
       duration: result.duration,
       completedAt: new Date().toISOString(),
     });
 
     broadcastHUD({ type: "mission_complete", duration: result.duration, missionId });
+
+    // Mémoire épisodique — enregistre l'expérience de la mission
+    import('../memory/episodic/index.js').then(({ storeEpisode }) => {
+      storeEpisode({
+        mission: command,
+        actions: result.steps?.map(s => s.step).filter(Boolean) || [],
+        outcome: finalStatus,
+        rewardScore: result.success ? 1.0 : 0.5,
+        lessons: [],
+      });
+    }).catch(() => {});
+
     return summary;
 
   } catch (err) {
@@ -436,6 +456,12 @@ async function runComputerUseMission(command, missionId) {
       completedAt: new Date().toISOString(),
     });
     broadcastHUD({ type: "mission_error", error: err.message, missionId });
+
+    // Mémoire épisodique — enregistre l'échec
+    import('../memory/episodic/index.js').then(({ storeEpisode }) => {
+      storeEpisode({ mission: command, actions: [], outcome: 'error', rewardScore: 0.0, lessons: [] });
+    }).catch(() => {});
+
     throw err;
   }
 }

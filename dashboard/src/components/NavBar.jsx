@@ -8,6 +8,8 @@ const NAV_ITEMS = [
   { id: "missions",  icon: "🎯", label: "Missions" },
   { id: "agents",    icon: "🤖", label: "Agents" },
   { id: "skills",    icon: "🔧", label: "Skills" },
+  { id: "swarm",     icon: "🌐", label: "Swarm" },
+  { id: "goals",     icon: "🏆", label: "Objectifs" },
   { id: "system",    icon: "📊", label: "Système" },
   { id: "logs",      icon: "📜", label: "Logs" },
   { id: "settings",  icon: "⚙️",  label: "Réglages" },

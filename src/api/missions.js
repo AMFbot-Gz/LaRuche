@@ -255,6 +255,10 @@ export function createMissionsRoutes(app, deps) {
       roles = await autoDetectRoles();
     } catch {}
 
+    const { worldModelStats } = await import('../worldmodel/index.js').catch(() => ({ worldModelStats: () => ({}) }));
+    const { episodeStats } = await import('../memory/episodic/index.js').catch(() => ({ episodeStats: () => ({}) }));
+    const { nodeRegistry } = await import('../swarm/index.js').catch(() => ({ nodeRegistry: { stats: () => ({}) } }));
+
     return c.json({
       status: "online",
       mode: "standalone",
@@ -272,6 +276,11 @@ export function createMissionsRoutes(app, deps) {
       },
       queue: missionQueue.stats,
       models: roles,
+      cognitiveMetrics: {
+        worldModel: worldModelStats(),
+        episodicMemory: episodeStats(),
+        swarm: nodeRegistry.stats(),
+      },
       timestamp: new Date().toISOString(),
     });
   });
@@ -671,5 +680,117 @@ export function createMissionsRoutes(app, deps) {
     } catch (e) {
       return c.json({ error: e.message }, 500);
     }
+  });
+
+  // ─── PERCEPTION ──────────────────────────────────────────────────────────────
+  app.get('/api/perception/stats', async (c) => {
+    const { axCache } = await import('../perception/index.js');
+    return c.json(axCache.stats);
+  });
+
+  // ─── WORLD MODEL ─────────────────────────────────────────────────────────────
+  app.get('/api/worldmodel/stats', async (c) => {
+    const { worldModelStats } = await import('../worldmodel/index.js');
+    return c.json(worldModelStats());
+  });
+  app.get('/api/worldmodel/:appName', async (c) => {
+    const { getAppModel } = await import('../worldmodel/index.js');
+    const model = getAppModel(c.req.param('appName'));
+    if (!model) return c.json({ error: 'App non trouvée dans le world model' }, 404);
+    return c.json(model);
+  });
+  app.delete('/api/worldmodel/:appName', async (c) => {
+    const { forgetApp } = await import('../worldmodel/index.js');
+    const ok = forgetApp(c.req.param('appName'));
+    return c.json({ success: ok });
+  });
+
+  // ─── SWARM ────────────────────────────────────────────────────────────────────
+  app.get('/api/swarm/nodes', async (c) => {
+    const { nodeRegistry } = await import('../swarm/index.js');
+    return c.json({ nodes: nodeRegistry.getAll() });
+  });
+  app.get('/api/swarm/stats', async (c) => {
+    const { nodeRegistry } = await import('../swarm/index.js');
+    return c.json(nodeRegistry.stats());
+  });
+
+  // ─── EVOLUTION ───────────────────────────────────────────────────────────────
+  app.get('/api/evolution/skills', async (c) => {
+    const { getAllStats } = await import('../evolution/skillRegistry.js');
+    return c.json({ skills: getAllStats() });
+  });
+  app.post('/api/evolution/trigger', async (c) => {
+    let body; try { body = await c.req.json(); } catch { return c.json({ error: 'Body invalide' }, 400); }
+    if (!body?.command) return c.json({ error: 'Champ command requis' }, 400);
+    const { analyzeFailedMission } = await import('../evolution/failureDetector.js');
+    const { triggerSkillGeneration } = await import('../evolution/skillGenerator.js');
+    const analysis = analyzeFailedMission({ command: body.command, steps: body.steps || [], status: 'failed' });
+    if (!analysis) return c.json({ triggered: false, reason: 'Aucun échec détecté' });
+    const result = await triggerSkillGeneration(analysis);
+    return c.json({ triggered: !!result, skill: result });
+  });
+
+  // ─── EPISODIC MEMORY ─────────────────────────────────────────────────────────
+  app.get('/api/memory/episodes', async (c) => {
+    const limit = parseInt(c.req.query('limit') || '20', 10);
+    const offset = parseInt(c.req.query('offset') || '0', 10);
+    const { getEpisodes } = await import('../memory/episodic/index.js');
+    return c.json(getEpisodes(limit, offset));
+  });
+  app.post('/api/memory/episodes/search', async (c) => {
+    let body; try { body = await c.req.json(); } catch { return c.json({ error: 'Body invalide' }, 400); }
+    if (!body?.query) return c.json({ error: 'Champ query requis' }, 400);
+    const { retrieveSimilarEpisodes } = await import('../memory/episodic/index.js');
+    return c.json({ results: retrieveSimilarEpisodes(body.query, body.limit || 5) });
+  });
+  app.delete('/api/memory/episodes/:id', async (c) => {
+    const { deleteEpisode } = await import('../memory/episodic/index.js');
+    const ok = deleteEpisode(c.req.param('id'));
+    return c.json({ success: ok });
+  });
+
+  // ─── GOALS / TEMPORAL ────────────────────────────────────────────────────────
+  // Note: /api/goals/schedule avant /api/goals/:id pour éviter conflit de route
+  app.get('/api/goals/schedule', async (c) => {
+    const { getSchedule, nextMission } = await import('../temporal/index.js');
+    return c.json({ schedule: getSchedule(), next: nextMission() });
+  });
+  app.get('/api/goals', async (c) => {
+    const { getAllGoals } = await import('../temporal/index.js');
+    return c.json({ goals: getAllGoals() });
+  });
+  app.post('/api/goals', async (c) => {
+    let body; try { body = await c.req.json(); } catch { return c.json({ error: 'Body invalide' }, 400); }
+    if (!body?.description) return c.json({ error: 'Champ description requis' }, 400);
+    const { addGoal } = await import('../temporal/index.js');
+    return c.json(addGoal(body), 201);
+  });
+  app.delete('/api/goals/:id', async (c) => {
+    const { deleteGoal } = await import('../temporal/index.js');
+    const ok = deleteGoal(c.req.param('id'));
+    if (!ok) return c.json({ error: 'But introuvable' }, 404);
+    return c.json({ success: true });
+  });
+
+  // ─── SIMULATION ───────────────────────────────────────────────────────────────
+  app.post('/api/simulate', async (c) => {
+    let body; try { body = await c.req.json(); } catch { return c.json({ error: 'Body invalide' }, 400); }
+    if (!body?.skill) return c.json({ error: 'Champ skill requis' }, 400);
+    const { simulate } = await import('../simulation/index.js');
+    return c.json(simulate({ skill: body.skill, params: body.params || {} }));
+  });
+
+  // ─── MARKET ───────────────────────────────────────────────────────────────────
+  app.get('/api/market/stats', async (c) => {
+    const { marketStats } = await import('../market/agentMarket.js');
+    return c.json(marketStats());
+  });
+
+  // ─── SELF-DEV ─────────────────────────────────────────────────────────────────
+  app.get('/api/selfdev/analyze', async (c) => {
+    const { runSelfAnalysis } = await import('../selfdev/index.js');
+    const result = await runSelfAnalysis();
+    return c.json(result);
   });
 }
