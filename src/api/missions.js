@@ -8,6 +8,7 @@
  */
 
 import { randomUUID } from "crypto";
+import { missionQueue } from "../missionQueue.js";
 
 // ─── Store in-memory des missions en cours ─────────────────────────────────────
 // missionId → { id, command, status, result, events, startedAt }
@@ -132,16 +133,24 @@ export function createMissionsRoutes(app, deps) {
       return c.json({ error: "Commande trop longue (max 2000 caractères)" }, 400);
     }
 
+    // Vérifie si la queue est saturée avant de créer l'entrée
+    if (missionQueue.pending >= 100) {
+      return c.json({
+        error: "Queue saturée : trop de missions en attente (max 100). Réessayez plus tard.",
+        queue: missionQueue.stats,
+      }, 503);
+    }
+
     const entry = createMissionEntry(command);
     logger.info(`[API] Nouvelle mission ${entry.id}: ${command.substring(0, 60)}`);
     broadcastHUD({ type: "mission_start", command: command.substring(0, 100), missionId: entry.id });
 
-    // Exécution asynchrone — on retourne immédiatement le missionId
-    runMission(command, entry.id).catch((err) => {
+    // Passage par la queue FIFO — la mission s'exécutera dès qu'un slot sera disponible
+    missionQueue.enqueue(() => runMission(command, entry.id)).catch((err) => {
       logger.error(`[API] Mission ${entry.id} erreur: ${err.message}`);
     });
 
-    return c.json({ missionId: entry.id, status: "pending" }, 202);
+    return c.json({ missionId: entry.id, status: "pending", queue: missionQueue.stats }, 202);
   });
 
   // ─── GET /api/missions ──────────────────────────────────────────────────────
@@ -212,6 +221,7 @@ export function createMissionsRoutes(app, deps) {
         success: successCount,
         active: activeMissionCount,
       },
+      queue: missionQueue.stats,
       models: roles,
       timestamp: new Date().toISOString(),
     });
@@ -272,6 +282,12 @@ export function createMissionsRoutes(app, deps) {
       }));
 
     return c.json({ query, results, count: results.length });
+  });
+
+  // ─── GET /api/queue ──────────────────────────────────────────────────────────
+  // Retourne les statistiques en temps réel de la queue de missions
+  app.get("/api/queue", (c) => {
+    return c.json(missionQueue.stats);
   });
 
   // ─── GET /api/health ─────────────────────────────────────────────────────────

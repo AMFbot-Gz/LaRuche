@@ -22,6 +22,7 @@ import { isStandaloneMode, startStandaloneServer } from "./modes/standalone.js";
 import { updateMission, appendMissionEvent } from "./api/missions.js";
 import { runIntentPipeline, isComputerUseIntent } from "./agents/intentPipeline.js";
 import { learn, memoryStats } from "./learning/missionMemory.js";
+import { missionQueue } from "./missionQueue.js";
 
 dotenv.config();
 
@@ -168,6 +169,12 @@ export function broadcastHUD(event) {
     }, 50);
   }
 }
+
+// ─── Queue : broadcast HUD à chaque changement pending/running ────────────────
+// Enregistré ici (après broadcastHUD) pour que le callback soit disponible dès le démarrage.
+missionQueue.onUpdate((stats) => {
+  broadcastHUD({ type: "queue_update", ...stats });
+});
 
 // ─── Butterfly Loop (Cœur IA) v4.1 ────────────────────────────────────────────────────────────
 /**
