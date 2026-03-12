@@ -1,5 +1,7 @@
 /**
- * janitor.js — Janitor Pro LaRuche
+ * janitor.js — Janitor Pro LaRuche v4.1
+ * fix(C2): require() → dynamic import pour skill_evolution.js
+ * fix(C3): better-sqlite3 supprimé (variable jamais utilisée)
  * Purge /temp 10min, rotation logs 24h, deep sleep, self-refactoring
  */
 
@@ -9,39 +11,28 @@ import { rm } from "fs/promises";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { execa } from "execa";
-import Database from "better-sqlite3";
 import dotenv from "dotenv";
-import winston from "winston";
+import { createContextLogger } from "./utils/logger.js";
 
 dotenv.config();
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 
-const logger = winston.createLogger({
-  level: "info",
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.printf(({ timestamp, level, message }) => `[${timestamp}] [JANITOR] ${message}`)
-  ),
-  transports: [
-    new winston.transports.Console(),
-    new winston.transports.File({ filename: join(ROOT, ".laruche/logs/janitor.log") }),
-  ],
-});
+const logger = createContextLogger('janitor');
 
-const db = new Database(join(ROOT, ".laruche/shadow-errors.db"));
 const TEMP_DIR = join(ROOT, ".laruche/temp");
 const LOGS_DIR = join(ROOT, ".laruche/logs");
 const LOG_TTL_HOURS = parseInt(process.env.LOG_TTL_HOURS || "24");
 const TEMP_PURGE_MIN = parseInt(process.env.TEMP_PURGE_INTERVAL_MIN || "10");
+const ROLLBACK_TTL_DAYS = parseInt(process.env.ROLLBACK_TTL_DAYS || "7");
+const LOG_MAX_SIZE_MB = parseInt(process.env.LOG_MAX_SIZE_MB || "10");
 
 mkdirSync(TEMP_DIR, { recursive: true });
 
 async function purgeTemp() {
   try {
     const files = readdirSync(TEMP_DIR);
-    // Suppression parallèle
     const deletePromises = files
       .filter(f => f !== ".gitkeep")
       .map(f => rm(join(TEMP_DIR, f), { recursive: true, force: true }).then(() => 1).catch(() => 0));
@@ -55,20 +46,16 @@ async function purgeTemp() {
 
 function rotateLogs() {
   try {
-    const cutoff = Date.now() - LOG_TTL_HOURS * 3600 * 1000;
     const files = readdirSync(LOGS_DIR);
     let rotated = 0;
-
     for (const f of files) {
       if (!f.endsWith(".log")) continue;
       const fullPath = join(LOGS_DIR, f);
       try {
         const stat = statSync(fullPath);
         const sizeMB = stat.size / (1024 * 1024);
-        if (sizeMB > 10) {
-          const bakPath = `${fullPath}.${Date.now()}.bak`;
-          // Renommer → nouveau fichier vide sera créé par le logger
-          rmSync(bakPath, { force: true });
+        if (sizeMB > LOG_MAX_SIZE_MB) {
+          rmSync(`${fullPath}.${Date.now()}.bak`, { force: true });
           logger.info(`Log rotaté: ${f} (${sizeMB.toFixed(1)}MB)`);
           rotated++;
         }
@@ -80,12 +67,12 @@ function rotateLogs() {
   }
 }
 
-function deleteExpiredSkills() {
+// fix(C2): dynamic import au lieu de require()
+async function deleteExpiredSkills() {
   try {
-    const { listSkills } = require("./skill_evolution.js");
+    const { listSkills } = await import('./skill_evolution.js');
     const skills = listSkills();
     let deleted = 0;
-
     for (const skill of skills) {
       if (skill.ttl && skill.ttl < Date.now()) {
         logger.info(`Skill TTL expiré: ${skill.name}`);
@@ -93,7 +80,7 @@ function deleteExpiredSkills() {
       }
     }
     if (deleted > 0) logger.info(`Skills TTL expirés supprimés: ${deleted}`);
-  } catch {}
+  } catch { /* skill_evolution optionnel */ }
 }
 
 function gcRAM() {
@@ -105,25 +92,22 @@ function gcRAM() {
 
 // ─── Crons ────────────────────────────────────────────────────────────────────
 
-// Purge /temp toutes les N minutes
 cron.schedule(`*/${TEMP_PURGE_MIN} * * * *`, () => {
   logger.info("Cron purge temp...");
   purgeTemp();
 });
 
-// Rotation logs quotidienne à minuit
 cron.schedule("0 0 * * *", () => {
   logger.info("Rotation logs quotidienne...");
   rotateLogs();
 });
 
-// Purge snapshots anciens tous les jours à 3h00
 cron.schedule("0 3 * * *", async () => {
   logger.info("Purge snapshots anciens...");
   try {
-    // Utilise readdirSync/statSync/rmSync déjà importés en haut du fichier
     const ROLLBACK_DIR = join(ROOT, ".laruche/rollback");
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - ROLLBACK_TTL_DAYS * 24 * 60 * 60 * 1000;
+    if (!readdirSync) return;
     const dirs = readdirSync(ROLLBACK_DIR).filter((d) => {
       try { return statSync(join(ROLLBACK_DIR, d)).isDirectory(); } catch { return false; }
     });
@@ -143,17 +127,14 @@ cron.schedule("0 3 * * *", async () => {
   }
 });
 
-// GC RAM si usage > 400MB
 cron.schedule("*/5 * * * *", () => {
-  const mem = process.memoryUsage();
-  const heapMB = mem.heapUsed / (1024 * 1024);
+  const heapMB = process.memoryUsage().heapUsed / (1024 * 1024);
   if (heapMB > 400) {
     logger.warn(`RAM haute (${heapMB.toFixed(0)}MB) — GC forcée`);
     gcRAM();
   }
 });
 
-logger.info("✅ Janitor Pro démarré — tous les crons actifs");
+logger.info("✅ Janitor Pro v4.1 démarré — tous les crons actifs");
 
-// Export pour usage direct
 export { purgeTemp, rotateLogs, gcRAM };
