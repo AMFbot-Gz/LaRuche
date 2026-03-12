@@ -239,6 +239,99 @@ await test("route() x20 parallèle < 10ms", async () => {
   assert(ms < 10, `Trop lent: ${ms}ms`);
 });
 
+// ─── 7. API REST ─────────────────────────────────────────────────────────────────────────────
+console.log(chalk.bold("\n  API REST (LaRuche :3000)"));
+
+const QUEEN_API = process.env.QUEEN_HOST || "http://localhost:3000";
+
+async function checkQueen() {
+  try {
+    const r = await fetch(`${QUEEN_API}/api/health`, { signal: AbortSignal.timeout(2000) });
+    return r.ok;
+  } catch { return false; }
+}
+
+const queenAvailable = await checkQueen();
+if (!queenAvailable) {
+  console.log(chalk.dim("  ⚠️  Queen API non disponible sur :3000 — tests API seront skippés\n"));
+}
+
+if (!queenAvailable) {
+  skip("POST /api/mission x3 parallèle → 202 + missionId unique");
+  skip("POST /api/mission x35 rapidement → au moins 1 retourne 429");
+  skip("GET /api/queue → { pending, running, completed, maxConcurrent }");
+  skip("GET /api/health → { ok: true }");
+  skip("GET /api/subagents → tableau");
+} else {
+  // Test : 3 missions en parallèle → toutes reçoivent 202 et ont un missionId unique
+  await test("POST /api/mission x3 parallèle → 202 + missionId unique", async () => {
+    const requests = [1, 2, 3].map(() =>
+      fetch(`${QUEEN_API}/api/mission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "prends un screenshot smoke test" }),
+        signal: AbortSignal.timeout(5000),
+      })
+    );
+    const responses = await Promise.all(requests);
+    const bodies = await Promise.all(responses.map(r => r.json()));
+
+    for (const r of responses) {
+      assert(r.status === 202, `Statut attendu 202, reçu ${r.status}`);
+    }
+
+    const ids = bodies.map(b => b.missionId);
+    assert(ids.every(id => typeof id === "string" && id.length > 0), "missionId manquant ou invalide");
+    const uniqueIds = new Set(ids);
+    assert(uniqueIds.size === 3, `IDs non-uniques: ${ids.join(", ")}`);
+  });
+
+  // Test : rate limit → au moins 1 retourne 429 après 35 requêtes rapides
+  await test("POST /api/mission x35 rapidement → au moins 1 retourne 429", async () => {
+    const reqs = Array(35).fill(null).map(() =>
+      fetch(`${QUEEN_API}/api/mission`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ command: "prends un screenshot rate limit test" }),
+        signal: AbortSignal.timeout(5000),
+      }).then(r => r.status)
+    );
+    const statuses = await Promise.all(reqs);
+    const has429 = statuses.some(s => s === 429);
+    assert(has429, `Aucun 429 reçu — statuts: ${[...new Set(statuses)].join(", ")}`);
+  });
+
+  // Test : GET /api/queue → structure { pending, running, completed, maxConcurrent }
+  await test("GET /api/queue → { pending, running, completed, maxConcurrent }", async () => {
+    const r = await fetch(`${QUEEN_API}/api/queue`, { signal: AbortSignal.timeout(3000) });
+    assert(r.ok, `HTTP ${r.status}`);
+    const d = await r.json();
+    assert("pending" in d, "Champ 'pending' manquant");
+    assert("running" in d, "Champ 'running' manquant");
+    assert("completed" in d, "Champ 'completed' manquant");
+    assert("maxConcurrent" in d, "Champ 'maxConcurrent' manquant");
+    assert(typeof d.pending === "number", "pending doit être un nombre");
+    assert(typeof d.maxConcurrent === "number", "maxConcurrent doit être un nombre");
+  });
+
+  // Test : GET /api/health → { ok: true }
+  await test("GET /api/health → { ok: true }", async () => {
+    const r = await fetch(`${QUEEN_API}/api/health`, { signal: AbortSignal.timeout(3000) });
+    assert(r.ok, `HTTP ${r.status}`);
+    const d = await r.json();
+    assert(d.ok === true, `ok=${d.ok}, attendu true`);
+  });
+
+  // Test : GET /api/subagents → tableau
+  await test("GET /api/subagents → tableau", async () => {
+    const r = await fetch(`${QUEEN_API}/api/subagents`, { signal: AbortSignal.timeout(3000) });
+    assert(r.ok, `HTTP ${r.status}`);
+    const d = await r.json();
+    assert(Array.isArray(d) || (typeof d === "object" && "subagents" in d),
+      `Réponse inattendue: ${JSON.stringify(d).slice(0, 80)}`);
+  });
+}
+
 // ─── RÉSULTAT ──────────────────────────────────────────────────────────────────────────────
 console.log();
 const total = passed + failed;
