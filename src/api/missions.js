@@ -789,8 +789,21 @@ export function createMissionsRoutes(app, deps) {
 
   // ─── SELF-DEV ─────────────────────────────────────────────────────────────────
   app.get('/api/selfdev/analyze', async (c) => {
-    const { runSelfAnalysis } = await import('../selfdev/index.js');
-    const result = await runSelfAnalysis();
-    return c.json(result);
+    const SELFDEV_TIMEOUT_MS = parseInt(process.env.SELFDEV_TIMEOUT_MS || '30000');
+    try {
+      const { runSelfAnalysis } = await import('../selfdev/index.js');
+      const result = await Promise.race([
+        runSelfAnalysis(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`selfdev timeout après ${SELFDEV_TIMEOUT_MS}ms`)), SELFDEV_TIMEOUT_MS)
+        ),
+      ]);
+      return c.json(result);
+    } catch (e) {
+      if (e.message?.includes('timeout')) {
+        return c.json({ error: e.message, code: 'SELFDEV_TIMEOUT' }, 504);
+      }
+      return c.json({ error: e.message }, 500);
+    }
   });
 }

@@ -1,0 +1,15 @@
+[
+  {
+    "id": "g-1773359212698-y3pz",
+    "description": "Tester la production",
+    "priority": 8,
+    "deadline": null,
+    "dependencies": [],
+    "subgoals": [],
+    "status": "pending",
+    "reward": 1,
+    "createdAt": "2026-03-12T23:46:52.698Z",
+    "updatedAt": "2026-03-12T23:46:52.698Z",
+    "completedAt": null
+  }
+]
