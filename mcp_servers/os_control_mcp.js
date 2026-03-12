@@ -9,6 +9,7 @@ import { z } from "zod";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { mkdirSync } from "fs";
+import Jimp from "jimp";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -164,7 +165,6 @@ server.tool(
     try {
       const robot = await getRobot();
       if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
-      const pos = robot.getMousePos();
       const dy = direction === "down" ? -amount : direction === "up" ? amount : 0;
       const dx = direction === "right" ? amount : direction === "left" ? -amount : 0;
       robot.scrollMouse(dx, dy);
@@ -181,27 +181,49 @@ server.tool(
   async () => {
     try {
       const robot = await getRobot();
-      if (!robot) return { content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }] };
+      if (!robot) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ success: false, error: "HID non disponible" }) }]
+        };
+      }
+
       const bitmap = robot.screen.capture();
       const timestamp = Date.now();
-      const path = join(SCREENSHOTS_DIR, `shot_${timestamp}.png`);
+      const filePath = join(SCREENSHOTS_DIR, `shot_${timestamp}.png`);
 
-      // Basic PNG save via robotjs bitmap
-      // En production: utiliser jimp ou sharp pour encoder le bitmap en PNG
+      // Convertir BGRA (RobotJS) → RGBA (Jimp)
+      const { width, height } = bitmap;
+      const rgbaBuffer = Buffer.alloc(width * height * 4);
+
+      for (let i = 0; i < width * height; i++) {
+        const src = i * 4;
+        rgbaBuffer[src + 0] = bitmap.image[src + 2]; // R ← B
+        rgbaBuffer[src + 1] = bitmap.image[src + 1]; // G ← G
+        rgbaBuffer[src + 2] = bitmap.image[src + 0]; // B ← R
+        rgbaBuffer[src + 3] = 255;                    // Alpha opaque
+      }
+
+      // Encoder et sauvegarder en PNG
+      const image = new Jimp({ data: rgbaBuffer, width, height });
+      await image.writeAsync(filePath);
+
       return {
         content: [{
           type: "text",
           text: JSON.stringify({
             success: true,
-            path,
-            width: bitmap.width,
-            height: bitmap.height,
+            path: filePath,
+            width,
+            height,
             timestamp,
+            size_kb: Math.round((width * height * 4) / 1024)
           }),
         }],
       };
     } catch (e) {
-      return { content: [{ type: "text", text: JSON.stringify({ success: false, error: e.message }) }] };
+      return {
+        content: [{ type: "text", text: JSON.stringify({ success: false, error: e.message }) }]
+      };
     }
   }
 );
