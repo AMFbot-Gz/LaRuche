@@ -69,6 +69,10 @@ export function startStandaloneServer(deps) {
         "POST /api/orchestrate",
         "GET  /api/agents/:name",
         "POST /api/process/restart",
+        "GET  /api/subagents",
+        "GET  /api/subagents/:id",
+        "POST /api/subagents/:id/dispatch",
+        "GET  /api/subagents/:id/stats",
       ],
     })
   );

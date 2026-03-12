@@ -23,6 +23,7 @@ import { updateMission, appendMissionEvent } from "./api/missions.js";
 import { runIntentPipeline, isComputerUseIntent } from "./agents/intentPipeline.js";
 import { learn, memoryStats } from "./learning/missionMemory.js";
 import { missionQueue } from "./missionQueue.js";
+import { subagentManager } from "./subagents/index.js";
 
 dotenv.config();
 
@@ -439,6 +440,12 @@ async function runComputerUseMission(command, missionId) {
   }
 }
 
+// ─── Initialisation SubagentManager ──────────────────────────────────────────
+// Injecte les dépendances (logger, broadcastHUD, runMission) maintenant que tout est défini.
+subagentManager.setDeps({ logger, broadcastHUD, runMission });
+logger.info("🐝 SubagentManager initialisé — sous-agents: " +
+  subagentManager.list().map(a => `${a.icon} ${a.name}`).join(", "));
+
 // ─── Démarrage ───────────────────────────────────────────────────────────────────────────────
 logger.info("╔══════════════════════════════════════════╗");
 logger.info(`║ 🐝 LaRuche OSS v4.1 — ${STANDALONE ? "Standalone    " : "Telegram mode"} ║`);
@@ -464,7 +471,7 @@ try {
 // ─── MODE STANDALONE ───────────────────────────────────────────────────────────────────────
 if (STANDALONE) {
   logger.info("🌐 Mode Standalone activé — Telegram désactivé");
-  startStandaloneServer({ loadMissions, saveMission, runMission, autoDetectRoles, broadcastHUD, logger });
+  startStandaloneServer({ loadMissions, saveMission, runMission, autoDetectRoles, broadcastHUD, logger, subagentManager });
   const shutdown = () => { logger.info("🛑 Arrêt en cours..."); wss.close(); process.exit(0); };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);

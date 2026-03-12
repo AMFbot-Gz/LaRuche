@@ -9,13 +9,17 @@
 
 import { randomUUID } from "crypto";
 import { missionQueue } from "../missionQueue.js";
+import { canTransition } from "../types/mission.js";
 
 // ─── Store in-memory des missions en cours ─────────────────────────────────────
-// missionId → { id, command, status, result, events, startedAt }
+// missionId → { id, command, status, result, events, startedAt, timeoutAt }
 export const activeMissions = new Map();
 
 // Durée de rétention des missions terminées dans le store in-memory (5 min)
 const RETENTION_MS = 5 * 60 * 1000;
+
+// Timeout global par mission — env MISSION_TIMEOUT_MS, défaut 5 min
+const MISSION_TIMEOUT_MS = parseInt(process.env.MISSION_TIMEOUT_MS || '300000');
 
 // ─── Rate limiting simple ──────────────────────────────────────────────────────
 // Limite : 30 requêtes/minute par IP (protection spam missions)
@@ -39,19 +43,46 @@ function checkRateLimit(ip) {
   return true;
 }
 
-// ─── Nettoyage périodique des missions en mémoire (>10 min) ────────────────────
+// ─── Nettoyage périodique des missions en mémoire (>10 min) + timeout ──────────
+// Vérifie toutes les 60 s :
+//   1. Passe en 'timeout' les missions running/pending dont timeoutAt est dépassé
+//   2. Supprime les missions terminées de plus de 10 min
 const CLEANUP_MS = 10 * 60 * 1000;
+let _broadcastHUD = null;  // injecté par createMissionsRoutes pour éviter import circulaire
+
 setInterval(() => {
-  const cutoff = Date.now() - CLEANUP_MS;
+  const now    = Date.now();
+  const cutoff = now - CLEANUP_MS;
+
   for (const [id, m] of activeMissions) {
+    // 1. Timeout : mission active dont timeoutAt est dépassé
+    if (
+      (m.status === 'pending' || m.status === 'running') &&
+      m.timeoutAt && new Date(m.timeoutAt).getTime() < now
+    ) {
+      if (canTransition(m.status, 'timeout')) {
+        Object.assign(m, {
+          status: 'timeout',
+          completedAt: new Date().toISOString(),
+          error: `Mission timeout après ${MISSION_TIMEOUT_MS}ms`,
+        });
+        _broadcastHUD?.({ type: 'mission_timeout', missionId: id });
+        // Nettoyage différé après rétention
+        setTimeout(() => activeMissions.delete(id), RETENTION_MS);
+      }
+      continue;
+    }
+
+    // 2. Nettoyage des missions terminées trop anciennes
     if (m.startedAt && new Date(m.startedAt).getTime() < cutoff) {
       activeMissions.delete(id);
     }
   }
-}, CLEANUP_MS).unref();
+}, 60_000).unref();
 
 /**
  * Crée une entrée de mission in-memory
+ * Inclut timeoutAt pour le cleanup périodique (Wave 1 — timeout global missions)
  */
 export function createMissionEntry(command) {
   const id = `m-${Date.now()}-${randomUUID().slice(0, 8)}`;
@@ -66,21 +97,36 @@ export function createMissionEntry(command) {
     duration: null,
     startedAt: new Date().toISOString(),
     completedAt: null,
+    timeoutAt: new Date(Date.now() + MISSION_TIMEOUT_MS).toISOString(),
   };
   activeMissions.set(id, entry);
   return entry;
 }
 
 /**
- * Met à jour le statut d'une mission in-memory
+ * Met à jour le statut d'une mission in-memory.
+ * Valide la transition de statut via canTransition() si le statut change.
  */
 export function updateMission(id, patch) {
   const entry = activeMissions.get(id);
   if (!entry) return;
+
+  // Validation de la transition si le statut change
+  if (patch.status && patch.status !== entry.status) {
+    if (!canTransition(entry.status, patch.status)) {
+      // Transition invalide : log silencieux + ignore le changement de statut
+      // (on applique quand même les autres champs du patch)
+      const { status: _ignored, ...rest } = patch;
+      Object.assign(entry, rest);
+      return;
+    }
+  }
+
   Object.assign(entry, patch);
 
-  // Nettoyage différé après rétention
-  if (patch.status === "success" || patch.status === "error") {
+  // Nettoyage différé après rétention pour tous les statuts terminaux
+  const TERMINAL = ['success', 'error', 'partial', 'failed', 'timeout', 'cancelled'];
+  if (patch.status && TERMINAL.includes(patch.status)) {
     setTimeout(() => activeMissions.delete(id), RETENTION_MS);
   }
 }
@@ -536,5 +582,91 @@ export function createMissionsRoutes(app, deps) {
       process.exit(0); // PM2 / superviseur relancera
     }, 1000);
     return c.json({ success: true, message: "Redémarrage en cours..." });
+  });
+
+  // ─── Routes Sous-agents ──────────────────────────────────────────────────────
+
+  // GET /api/subagents — liste tous les sous-agents (config + stats)
+  app.get("/api/subagents", async (c) => {
+    try {
+      const { subagentManager } = await import("../subagents/index.js");
+      return c.json({ subagents: subagentManager.list() });
+    } catch (e) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // GET /api/subagents/:id — détails d'un sous-agent
+  app.get("/api/subagents/:id", async (c) => {
+    const id = c.req.param("id");
+    try {
+      const { subagentManager } = await import("../subagents/index.js");
+      const list = subagentManager.list();
+      const agent = list.find((a) => a.id === id);
+      if (!agent) return c.json({ error: `Sous-agent inconnu : ${id}` }, 404);
+      return c.json(agent);
+    } catch (e) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // POST /api/subagents/:id/dispatch — lance une tâche sur un sous-agent
+  // body: { task: "...", context?: {}, skill?: "..." }
+  // retourne: { taskId, subagentId, status: "pending" } immédiatement
+  app.post("/api/subagents/:id/dispatch", async (c) => {
+    const id = c.req.param("id");
+
+    let body;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: "Body JSON invalide" }, 400);
+    }
+
+    const task = body?.task?.trim();
+    if (!task) return c.json({ error: "Champ 'task' requis" }, 400);
+    if (task.length > 2000) return c.json({ error: "Tâche trop longue (max 2000 caractères)" }, 400);
+
+    let subagentManagerMod;
+    try {
+      subagentManagerMod = await import("../subagents/index.js");
+    } catch (e) {
+      return c.json({ error: `Impossible de charger le sous-agent manager : ${e.message}` }, 500);
+    }
+
+    const { subagentManager } = subagentManagerMod;
+
+    // Vérifier que l'agent existe avant de lancer en async
+    const list = subagentManager.list();
+    if (!list.find((a) => a.id === id)) {
+      return c.json({ error: `Sous-agent inconnu : ${id}` }, 404);
+    }
+
+    const { randomUUID } = await import("crypto");
+    const taskId = `sa-${Date.now()}-${randomUUID().slice(0, 6)}`;
+
+    // Dispatch asynchrone — on retourne immédiatement le taskId
+    subagentManager.dispatch(id, task, {
+      context: body?.context || undefined,
+      skill: body?.skill || undefined,
+      taskId,
+    }).catch((err) => {
+      logger.error(`[API] Sous-agent ${id} dispatch erreur : ${err.message}`);
+    });
+
+    return c.json({ taskId, subagentId: id, status: "pending" }, 202);
+  });
+
+  // GET /api/subagents/:id/stats — stats d'un sous-agent
+  app.get("/api/subagents/:id/stats", async (c) => {
+    const id = c.req.param("id");
+    try {
+      const { subagentManager } = await import("../subagents/index.js");
+      const stats = subagentManager.stats(id);
+      if (!stats) return c.json({ error: `Sous-agent inconnu : ${id}` }, 404);
+      return c.json(stats);
+    } catch (e) {
+      return c.json({ error: e.message }, 500);
+    }
   });
 }
