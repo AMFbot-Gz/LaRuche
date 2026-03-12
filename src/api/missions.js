@@ -451,6 +451,28 @@ export function createMissionsRoutes(app, deps) {
     }
   });
 
+  // ─── GET /api/memory ─────────────────────────────────────────────────────────
+  // Stats de la mémoire apprise + top routes
+  app.get("/api/memory", async (c) => {
+    try {
+      const { memoryStats } = await import("../learning/missionMemory.js");
+      return c.json(memoryStats());
+    } catch (e) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ─── DELETE /api/memory/forget ───────────────────────────────────────────────
+  // Oublie une route apprise : { command: "..." }
+  app.delete("/api/memory/forget", async (c) => {
+    let body;
+    try { body = await c.req.json(); } catch { return c.json({ error: "Body JSON invalide" }, 400); }
+    if (!body?.command) return c.json({ error: "Champ 'command' requis" }, 400);
+    const { forget } = await import("../learning/missionMemory.js");
+    const removed = forget(body.command);
+    return c.json({ success: removed, message: removed ? `Route oubliée` : `Aucune route trouvée` });
+  });
+
   // ─── POST /api/process/restart ───────────────────────────────────────────────
   app.post("/api/process/restart", async (c) => {
     // On broadcaste l'event puis on schedule un restart dans 1s

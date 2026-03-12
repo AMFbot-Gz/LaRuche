@@ -42,3 +42,7 @@ coverage/
 
 # Dossier projet imbriqué
 LaRuche/
+
+# Memory — pas versionné (généré au runtime)
+data/learned_routes.json
+data/mission_log.jsonl

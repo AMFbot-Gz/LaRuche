@@ -7,6 +7,7 @@ import { callLLM } from "../llm/callLLM.js";
 import { getAllSkills, getRelevantSkills, formatSkillsForPrompt } from "../skills/skillLoader.js";
 import { routeByRules } from './intentRouter.js';
 import { buildCompactContext } from '../context/agentIdentity.js';
+import { recall, learn } from '../learning/missionMemory.js';
 
 // ─── Prompt système planner ────────────────────────────────────────────────────────────
 function buildPlannerPrompt(intent, skills) {
@@ -47,18 +48,28 @@ export function isComputerUseIntent(text) {
 export async function plan(intent, options = {}) {
   const { timeout = 20000 } = options;
 
-  // 1. Essayer le routeur déterministe (zéro LLM, zéro erreur)
+  // 1. Routeur déterministe (zéro LLM, zéro erreur, instant)
   const routed = routeByRules(intent);
   if (routed.matched) {
     return { ...routed.plan, model: 'rules-engine' };
   }
 
-  // 15 skills les plus pertinents pour cette intention
+  // 2. Mémoire apprise — plan déjà vu, retour immédiat sans LLM
+  const memorized = recall(intent);
+  if (memorized) {
+    console.info(`[planner] Memory hit (${(memorized.confidence * 100).toFixed(0)}%) — "${memorized.originalCommand?.slice(0, 50)}"`);
+    return {
+      goal: intent,
+      steps: memorized.steps,
+      confidence: memorized.confidence,
+      model: 'memory',
+    };
+  }
+
+  // 3. Fallback LLM (lent) — 15 skills les plus pertinents
   const skills = getRelevantSkills(intent, 15);
   const prompt = buildPlannerPrompt(intent, skills);
-
-  // Toujours utiliser worker (llama3.2:3b) pour le planner — plus rapide, JSON simple
-  const role = "worker";
+  const role = "worker";  // llama3.2:3b — plus rapide, JSON simple
 
   let result;
   try {
@@ -93,6 +104,11 @@ export async function plan(intent, options = {}) {
       }
       return true;
     });
+
+    // Apprend ce plan pour la prochaine fois (async, non bloquant)
+    if (parsed.steps.length > 0) {
+      setImmediate(() => learn(intent, parsed.steps, true, 0, 'llm'));
+    }
 
     return { ...parsed, model: result.model };
   } catch (e) {

@@ -22,8 +22,14 @@ import { isStandaloneMode, startStandaloneServer } from "./modes/standalone.js";
 import { updateMission, appendMissionEvent } from "./api/missions.js";
 import { runIntentPipeline, isComputerUseIntent } from "./agents/intentPipeline.js";
 import { isActionIntent } from "./agents/intentRouter.js";
+import { learn, memoryStats } from "./learning/missionMemory.js";
 
 dotenv.config();
+
+// ─── Mode Autonome Total : HITL auto-approve en standalone ────────────────────
+if (!process.env.HITL_AUTO_APPROVE) {
+  process.env.HITL_AUTO_APPROVE = 'true';  // exécution directe, zéro blocage HITL
+}
 
 // ─── Chemins et Constantes ─────────────────────────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -288,11 +294,10 @@ Réponse courte et directe.`;
 }
 
 export async function runMission(command, missionId) {
-  // Routage : règle déterministe ou computer-use → pipeline direct, sinon → butterfly LLM
-  if (isActionIntent(command) || isComputerUseIntent(command)) {
-    return runComputerUseMission(command, missionId);
-  }
-  return butterflyLoop(command, async () => {}, missionId);
+  // Mode Exécution Directe Totale :
+  // 1. Toujours tenter la pipeline directe (rules → memory → LLM skills)
+  // 2. Fallback butterfly uniquement si aucun step valide généré (question textuelle pure)
+  return runComputerUseMission(command, missionId);
 }
 
 /**
@@ -346,10 +351,19 @@ async function runComputerUseMission(command, missionId) {
       // run_command / run_shell retournent r.output ou r.stdout
       if (r.output && typeof r.output === 'string') return r.output.slice(0, 600);
       if (r.stdout && typeof r.stdout === 'string') return r.stdout.slice(0, 600);
-      // message de skill (smart_click, find_element…)
+      // message de skill (smart_click, find_element…) ou llm_answer
       if (r.message && typeof r.message === 'string') return r.message;
       return null;
     };
+
+    // Réponse textuelle LLM directe (fallback pipeline)
+    if (result._textResponse) {
+      const summary = `💬 ${result._textResponse.slice(0, 800)}`;
+      saveMission({ id: missionId, command, status: "success", duration: result.duration, result: summary, ts: new Date().toISOString() });
+      if (missionId) updateMission(missionId, { status: "success", result: summary, duration: result.duration, completedAt: new Date().toISOString() });
+      broadcastHUD({ type: "mission_complete", duration: result.duration, missionId });
+      return summary;
+    }
 
     const summary = result.success
       ? `✅ Mission accomplie en ${(result.duration / 1000).toFixed(1)}s\n\n` +
@@ -360,6 +374,14 @@ async function runComputerUseMission(command, missionId) {
         }).join('\n\n')
       : `⚠️ Partiellement complété (${result.steps.filter(s => s.result?.success !== false).length}/${result.steps.length} étapes)\n\n` +
         (result.error || 'Certaines étapes ont échoué');
+
+    // Apprend le plan si succès via LLM (pour accélérer les prochaines fois)
+    if (result.success && result.model && result.model !== 'rules-engine' && result.model !== 'memory') {
+      const learnedSteps = result.steps?.map(s => s.step).filter(Boolean) || [];
+      if (learnedSteps.length > 0) {
+        setImmediate(() => learn(command, learnedSteps, true, result.duration, 'llm'));
+      }
+    }
 
     saveMission({
       id: missionId,

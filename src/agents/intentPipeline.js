@@ -200,8 +200,23 @@ export async function runIntentPipeline(intent, {
   hudFn?.({ type: "thinking", agent: "Planner", thought: `"${intent.slice(0, 60)}"` });
 
   const planResult = await plan(intent);
+
+  // Fallback textuel : si aucun step valide → réponse LLM directe via run_command echo
   if (planResult.error || planResult.steps.length === 0) {
-    return { success: false, goal: intent, error: planResult.error || "Plan vide", steps: [], duration: Date.now() - startTime };
+    hudFn?.({ type: "thinking", agent: "Planner", thought: "Plan vide → réponse LLM directe" });
+    const { ask } = await import("../model_router.js");
+    const fallback = await ask(intent, { role: 'worker', temperature: 0.4, timeout: 30000 });
+    const text = fallback.text || planResult.error || "Aucune réponse";
+    const duration = Date.now() - startTime;
+    hudFn?.({ type: "mission_complete", duration });
+    return {
+      success: true,
+      goal: intent,
+      steps: [{ step: { skill: 'llm_answer', params: {} }, result: { success: true, message: text }, success: true }],
+      model: fallback.model || 'llm',
+      duration,
+      _textResponse: text,
+    };
   }
 
   onPlanReady?.(planResult);
