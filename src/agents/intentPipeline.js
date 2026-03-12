@@ -1,18 +1,16 @@
 /**
  * intentPipeline.js - Pipeline intention -> plan -> exécution avec vision loop
  *
- * Améliorations v2:
- * - Vision entre chaque step (validation + détection d'erreurs)
- * - Auto-correction sur échec (screenshot -> analyse -> replan step)
- * - Playwright comme MCP prioritaire, AppleScript en fallback
- * - Chargement dynamique des skills depuis workspace/skills/
+ * v3 : Skills découverts via skillLoader (4 niveaux de priorité, cache 30s)
+ *      loadDynamicSkills() remplacé par loadSkillHandlers() qui utilise
+ *      getAllSkills().indexPath pour trouver les index.js des skills fichiers
  */
 
 import { plan, isComputerUseIntent } from "./planner.js";
+import { getAllSkills } from "../skills/skillLoader.js";
 import { execa } from "execa";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { readdirSync, existsSync } from "fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "../../");
@@ -36,13 +34,13 @@ async function callMCP(serverFile, toolName, args = {}, timeout = 20000) {
       const { stdout, stderr } = await execa("node", [join(ROOT, "mcp_servers", serverFile)], {
         input: rpcRequest,
         cwd: ROOT,
-        timeout: timeout * attempt, // Incremental timeout
+        timeout: timeout * attempt,
         reject: false,
       });
 
       if (!stdout?.trim()) {
-         if (stderr) throw new Error(stderr);
-         throw new Error("Empty MCP response");
+        if (stderr) throw new Error(stderr);
+        throw new Error("Empty MCP response");
       }
 
       const parsed = JSON.parse(stdout.trim());
@@ -55,7 +53,7 @@ async function callMCP(serverFile, toolName, args = {}, timeout = 20000) {
       lastError = e.message;
       console.warn(`[MCP Retry] ${toolName} attempt ${attempt} failed: ${lastError}`);
       if (attempt < maxRetries) {
-        await new Promise(r => setTimeout(r, 1000 * attempt)); // Exponential backoff
+        await new Promise(r => setTimeout(r, 1000 * attempt));
       }
     }
   }
@@ -88,54 +86,53 @@ async function takeScreenshot() {
   return osResult?.path || null;
 }
 
-// --- Chargement dynamique des skills -----------------------------------------
+// --- Chargement des handlers de skills fichiers ------------------------------
+//
+// Remplace loadDynamicSkills() : utilise getAllSkills() comme source de vérité
+// pour la découverte des skills, puis importe leur index.js si présent.
 
-let _dynamicSkills = null;
-let _dynamicSkillsTs = 0;
+let _handlers = null;
+let _handlersTs = 0;
 
-async function loadDynamicSkills() {
-  if (_dynamicSkills && Date.now() - _dynamicSkillsTs < 30000) return _dynamicSkills;
+async function loadSkillHandlers() {
+  if (_handlers && Date.now() - _handlersTs < 30000) return _handlers;
 
-  const skillsDir = join(ROOT, "workspace/skills");
   const handlers = {};
+  const skills = getAllSkills();
 
-  if (existsSync(skillsDir)) {
-    for (const name of readdirSync(skillsDir)) {
-      const indexPath = join(skillsDir, name, "index.js");
-      if (!existsSync(indexPath)) continue;
-
-      try {
-        const mod = await import(`${indexPath}?t=${Date.now()}`);
-        if (typeof mod.run === "function") {
-          handlers[name] = (params) => mod.run(params);
-        }
-      } catch { /* skip broken skills */ }
-    }
+  for (const skill of skills) {
+    if (!skill.indexPath) continue; // Skill builtin ou sans index.js → handler builtin
+    try {
+      const mod = await import(`${skill.indexPath}?t=${Date.now()}`);
+      if (typeof mod.run === "function") {
+        handlers[skill.name] = (params) => mod.run(params);
+      }
+    } catch { /* skip skill cassé */ }
   }
 
-  _dynamicSkills = handlers;
-  _dynamicSkillsTs = Date.now();
+  _handlers = handlers;
+  _handlersTs = Date.now();
   return handlers;
 }
 
 // --- Handlers builtin --------------------------------------------------------
 
 const BUILTIN_HANDLERS = {
-  open_safari: (p) => callMCP("browser_mcp.js", "os.openApp", { app: "Safari" }),
-  go_to_youtube: (p) => callMCP("playwright_mcp.js", "pw.goto", { url: "https://www.youtube.com" }),
-  search_youtube: (p) => callMCP("playwright_mcp.js", "pw.searchYouTube", { query: p.query || "relaxing music" }),
-  play_first_result: (p) => callMCP("playwright_mcp.js", "pw.clickFirstYoutubeResult", {}),
-  open_app: (p) => callMCP("browser_mcp.js", "os.openApp", { app: p.app || "Safari" }),
-  focus_app: (p) => callMCP("browser_mcp.js", "os.focusApp", { app: p.app || "Safari" }),
-  goto_url: (p) => callMCP("playwright_mcp.js", "pw.goto", { url: p.url }),
-  click_element: (p) => callMCP("playwright_mcp.js", "pw.click", { selector: p.selector }),
-  fill_field: (p) => callMCP("playwright_mcp.js", "pw.fill", { selector: p.selector, text: p.text }),
-  press_key: (p) => callMCP("playwright_mcp.js", "pw.press", { key: p.key || "Enter" }),
-  take_screenshot: (p) => callMCP("playwright_mcp.js", "pw.screenshot", {}),
-  extract_text: (p) => callMCP("playwright_mcp.js", "pw.extract", { selector: p.selector }),
-  run_command: (p) => callMCP("terminal_mcp.js", "execSafe", { command: p.command }),
-  type_text: (p) => callMCP("os_control_mcp.js", "typeText", { text: p.text || p.query || "" }),
-  press_enter: (p) => callMCP("browser_mcp.js", "browser.pressEnter", {}),
+  open_safari:       (p) => callMCP("browser_mcp.js",     "os.openApp",                { app: "Safari" }),
+  go_to_youtube:     (p) => callMCP("playwright_mcp.js",  "pw.goto",                   { url: "https://www.youtube.com" }),
+  search_youtube:    (p) => callMCP("playwright_mcp.js",  "pw.searchYouTube",          { query: p.query || "relaxing music" }),
+  play_first_result: (p) => callMCP("playwright_mcp.js",  "pw.clickFirstYoutubeResult", {}),
+  open_app:          (p) => callMCP("browser_mcp.js",     "os.openApp",                { app: p.app || "Safari" }),
+  focus_app:         (p) => callMCP("browser_mcp.js",     "os.focusApp",               { app: p.app || "Safari" }),
+  goto_url:          (p) => callMCP("playwright_mcp.js",  "pw.goto",                   { url: p.url }),
+  click_element:     (p) => callMCP("playwright_mcp.js",  "pw.click",                  { selector: p.selector }),
+  fill_field:        (p) => callMCP("playwright_mcp.js",  "pw.fill",                   { selector: p.selector, text: p.text }),
+  press_key:         (p) => callMCP("playwright_mcp.js",  "pw.press",                  { key: p.key || "Enter" }),
+  take_screenshot:   (p) => callMCP("playwright_mcp.js",  "pw.screenshot",             {}),
+  extract_text:      (p) => callMCP("playwright_mcp.js",  "pw.extract",                { selector: p.selector }),
+  run_command:       (p) => callMCP("terminal_mcp.js",    "execSafe",                  { command: p.command }),
+  type_text:         (p) => callMCP("os_control_mcp.js",  "typeText",                  { text: p.text || p.query || "" }),
+  press_enter:       (p) => callMCP("browser_mcp.js",     "browser.pressEnter",        {}),
 };
 
 // --- Exécution d'un step ------------------------------------------------------
@@ -144,8 +141,9 @@ async function executeStep(step, hudFn, useVision = false) {
   const { skill, params = {} } = step;
   hudFn?.({ type: "task_start", task: `${skill}(${JSON.stringify(params).slice(0, 50)})` });
 
-  const dynamicSkills = await loadDynamicSkills();
-  const handler = dynamicSkills[skill] || BUILTIN_HANDLERS[skill];
+  // Priorité : index.js du skill fichier > handler builtin
+  const skillHandlers = await loadSkillHandlers();
+  const handler = skillHandlers[skill] || BUILTIN_HANDLERS[skill];
 
   if (!handler) {
     const e = { success: false, error: `Skill non trouvé: ${skill}` };
