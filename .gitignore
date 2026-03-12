@@ -13,6 +13,9 @@ __pycache__/
 .laruche/temp/
 .laruche/rollback/
 .laruche/logs/
+.laruche/config.json
+.laruche/missions.json
+.laruche/cron_history.json
 vault/
 *.db
 *.db-journal

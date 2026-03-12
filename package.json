@@ -14,7 +14,7 @@
     "build": "tsc",
     "hud": "electron hud/main.js",
     "dash": "cd dashboard && vite",
-    "test": "jest --coverage",
+    "test": "node --experimental-vm-modules node_modules/.bin/jest --coverage",
     "test:standalone": "node test/e2e/standalone.test.js",
     "test:e2e": "npx playwright test test/e2e/dashboard.spec.js",
     "test:all": "bash scripts/test-all.sh",

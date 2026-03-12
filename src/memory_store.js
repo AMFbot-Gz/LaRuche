@@ -93,6 +93,8 @@ async function extractLesson(mission) {
 let _lastStoredMissionId = null;
 let _storageTimeout = null;
 
+process.on("exit", () => { if (_storageTimeout) clearTimeout(_storageTimeout); });
+
 export async function storeMissionMemory(mission) {
   const missionId = `${mission.goal}_${mission.success}_${mission.steps?.length}`;
   if (_lastStoredMissionId === missionId) return;

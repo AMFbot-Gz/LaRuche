@@ -3,7 +3,7 @@
  * Exécute un skill et peut en générer un nouveau si manquant
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { ask } from "./model_router.js";
@@ -49,7 +49,6 @@ export async function generateAndRun(description, params = {}) {
 
 export function listSkills() {
   if (!existsSync(SKILLS_DIR)) return [];
-  const { readdirSync, statSync } = require("fs");
   return readdirSync(SKILLS_DIR)
     .filter((d) => { try { return statSync(join(SKILLS_DIR, d)).isDirectory(); } catch { return false; } })
     .map((d) => {
