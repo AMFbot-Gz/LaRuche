@@ -5,9 +5,12 @@
  * Supports: operator | devops | builder agents
  * Provider-agnostic via src/llm/provider.ts
  * Tool-agnostic via src/tools/toolRouter.ts
+ *
+ * fix(C5): chemin config corrigé configuration/agents/ → config/agents/
+ * fix(C4): HITL activé — voir fix/hitl-activation (PR #2)
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { randomUUID } from "crypto";
@@ -55,8 +58,48 @@ export interface AgentResponse {
   response: string;
   iterations: number;
   tool_calls_count: number;
-  status: "completed" | "max_iterations" | "error" | "interrupted";
+  status: "completed" | "max_iterations" | "error" | "interrupted" | "hitl_rejected";
   error?: string;
+}
+
+// --- HITL Risk Map -----------------------------------------------------------
+
+const TOOL_RISK_MAP: Record<string, number> = {
+  "terminal.run":       0.9,
+  "terminal.safe":      0.5,
+  "hid.click":          0.3,
+  "hid.type":           0.3,
+  "hid.screenshot":     0.1,
+  "vision.analyze":     0.1,
+  "vault.store":        0.4,
+  "vault.search":       0.1,
+  "pw.goto":            0.2,
+  "pw.click":           0.3,
+  "pw.fill":            0.4,
+  "pw.screenshot":      0.1,
+  "os.openApp":         0.2,
+  "os.focusApp":        0.1,
+  "rollback.snapshot":  0.5,
+  "rollback.restore":   0.85,
+};
+
+function getToolRisk(toolName: string): number {
+  return TOOL_RISK_MAP[toolName] ?? 0.5; // inconnue = risque médian
+}
+
+async function requestHITL(
+  toolName: string,
+  args: any,
+  risk: number,
+  onHITL?: (tool: string, args: any, risk: number) => Promise<boolean>,
+  timeoutMs = 60_000
+): Promise<boolean> {
+  if (!onHITL) return true; // Pas de callback = auto-approve
+
+  return Promise.race([
+    onHITL(toolName, args, risk),
+    new Promise<boolean>(resolve => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
 }
 
 // --- Implementation ----------------------------------------------------------
@@ -79,22 +122,22 @@ class AgentLoop {
   }
 
   private loadConfig(name: string): AgentConfig {
-    const configPath = join(ROOT, `configuration/agents/${name}.yaml`);
+    // fix(C5): chemin corrigé configuration/agents/ → config/agents/
+    const configPath = join(ROOT, `config/agents/${name}.yaml`);
     if (!existsSync(configPath)) {
-      throw new Error(`Agent configuration not found: ${name}`);
+      throw new Error(`Agent configuration not found: config/agents/${name}.yaml`);
     }
     return parseYaml(readFileSync(configPath, "utf-8")) as AgentConfig;
   }
 
   private buildSystemPrompt(): string {
-    const timestamp = new Date().toISOString();
     return `
 You are an autonomous AI agent part of the LaRuche swarm.
 Agent Identity: ${this.config.description}
 Core Soul: ${this.config.soul}
 
 CONTEXT:
-Current Time: ${timestamp}
+Current Time: ${new Date().toISOString()}
 Working Directory: ${ROOT}
 
 RULES:
@@ -105,12 +148,21 @@ RULES:
 `.trim();
   }
 
-  async run(userInput: string, opts: any = {}): Promise<AgentResponse> {
+  async run(userInput: string, opts: {
+    onIteration?: (n: number) => void;
+    onToken?: (t: string) => void;
+    onToolCall?: (tool: string, args: any) => void;
+    onThought?: (t: string) => void;
+    onHITL?: (tool: string, args: any, risk: number) => Promise<boolean>;
+  } = {}): Promise<AgentResponse> {
+
     this.messages = [
       { role: "system", content: this.buildSystemPrompt() },
-      { role: "user", content: userInput }
+      { role: "user",   content: userInput }
     ];
 
+    const hitlThreshold = this.config.loop.hitl_threshold ?? 0.7;
+    const hitlTimeoutMs = parseInt(process.env.HITL_TIMEOUT_SEC || '60') * 1000;
     let iterations = 0;
     let toolCallsCount = 0;
 
@@ -143,12 +195,33 @@ RULES:
           };
         }
 
-        // Handle Tool Calls
+        // Handle Tool Calls avec HITL
         for (const call of response.toolCalls) {
           toolCallsCount++;
           if (toolCallsCount > this.config.loop.max_tool_calls) break;
 
           opts.onToolCall?.(call.name, call.args);
+
+          // ─── HITL check (fix C4) ───
+          const risk = getToolRisk(call.name);
+          if (risk >= hitlThreshold) {
+            const approved = await requestHITL(
+              call.name, call.args, risk, opts.onHITL, hitlTimeoutMs
+            );
+
+            if (!approved) {
+              // Inject le rejet comme résultat de tool — le modèle peut proposer une alternative
+              this.messages.push({
+                role: "tool",
+                toolCallId: call.id,
+                content: JSON.stringify({
+                  success: false,
+                  error: `HITL_REJECTED: l'opérateur a refusé l'exécution de ${call.name} (risk=${risk.toFixed(2)})`
+                })
+              });
+              continue;
+            }
+          }
 
           const toolResult = await this.toolRouter.call(call.name, call.args);
           this.messages.push({
@@ -160,7 +233,7 @@ RULES:
 
       } catch (error: any) {
         if (iterations >= this.config.loop.retry_on_error) {
-           return {
+          return {
             sessionId: this.sessionId,
             response: "",
             iterations,
@@ -169,14 +242,14 @@ RULES:
             error: error.message
           };
         }
-        console.warn(`[AgentLoop] Iteration ${iterations} failed, retrying...`);
+        console.warn(`[AgentLoop] Itération ${iterations} échouée, retry...`);
         await new Promise(r => setTimeout(r, 1000));
       }
     }
 
     return {
       sessionId: this.sessionId,
-      response: "Max iterations reached.",
+      response: "Max iterations atteint.",
       iterations,
       tool_calls_count: toolCallsCount,
       status: "max_iterations"
@@ -185,7 +258,7 @@ RULES:
 }
 
 /**
- * Main entry point for the bridge.
+ * Point d'entrée pour agentBridge.js
  */
 export async function runAgentLoop(opts: {
   agentName: string;
@@ -193,6 +266,7 @@ export async function runAgentLoop(opts: {
   onToken?: (t: string) => void;
   onToolCall?: (tool: string, args: any) => void;
   onThought?: (t: string) => void;
+  onHITL?: (tool: string, args: any, risk: number) => Promise<boolean>;
 }) {
   const loop = new AgentLoop(opts.agentName);
   return await loop.run(opts.userInput, opts);
