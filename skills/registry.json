@@ -1,0 +1,36 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-03-12T00:00:00.000Z",
+  "skills": [
+    {
+      "name": "list_big_files",
+      "description": "Liste les N fichiers les plus lourds d'un dossier (exclude node_modules, .git)",
+      "version": "1.0.0",
+      "created": "2026-03-12T00:00:00.000Z"
+    },
+    {
+      "name": "http_fetch",
+      "description": "Fait un appel HTTP (GET/POST) et retourne le contenu texte",
+      "version": "1.0.0",
+      "created": "2026-03-12T00:00:00.000Z"
+    },
+    {
+      "name": "read_file",
+      "description": "Lit un fichier local et retourne son contenu (max 8000 chars par défaut)",
+      "version": "1.0.0",
+      "created": "2026-03-12T00:00:00.000Z"
+    },
+    {
+      "name": "run_shell",
+      "description": "Exécute une commande shell de la liste blanche (ls, cat, grep, git, etc.)",
+      "version": "1.0.0",
+      "created": "2026-03-12T00:00:00.000Z"
+    },
+    {
+      "name": "summarize_project",
+      "description": "Génère un résumé de la structure d'un projet (arbre, package.json, README)",
+      "version": "1.0.0",
+      "created": "2026-03-12T00:00:00.000Z"
+    }
+  ]
+}

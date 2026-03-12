@@ -1,13 +1,18 @@
 /**
  * App.jsx — LaRuche HQ Dashboard
- * Design inspiré Claude.ai — sidebar + main chat area
- * Theme : warm dark, terracotta orange accent
+ * Layout 3 colonnes :
+ *   • Sidebar gauche (navigation + historique missions)
+ *   • Zone centrale (ChatFeed + Composer)
+ *   • RightPanel (StatusGrid + CostMeter + TelegramConsole)
  */
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import Sidebar from "./components/Sidebar.jsx";
-import ChatFeed from "./components/ChatFeed.jsx";
-import Composer from "./components/Composer.jsx";
+import Sidebar         from "./components/Sidebar.jsx";
+import ChatFeed        from "./components/ChatFeed.jsx";
+import Composer        from "./components/Composer.jsx";
+import StatusGrid      from "./components/StatusGrid.jsx";
+import CostMeter       from "./components/CostMeter.jsx";
+import TelegramConsole from "./components/TelegramConsole.jsx";
 
 const QUEEN_API = import.meta.env.VITE_QUEEN_API || "http://localhost:3000";
 const WS_URL    = import.meta.env.VITE_WS_URL    || "ws://localhost:9001";
@@ -108,14 +113,122 @@ function TopBar({ status, view }) {
   );
 }
 
+// ─── RightPanel — StatusGrid + CostMeter + TelegramConsole ───────────────────
+function RightPanel({ status, missions, wsEvents, logs }) {
+  // Calcul des tokens totaux depuis les missions pour CostMeter
+  const totalTokens = missions.reduce((acc, m) => acc + (m.tokens || 0), 0) || undefined;
+
+  // Dérivation des agents depuis status.models pour StatusGrid
+  const agentsProp = React.useMemo(() => {
+    const models = status.models || {};
+    if (Object.keys(models).length === 0) return undefined; // laisse StatusGrid gérer le fetch
+    return [
+      {
+        id: "strategist",
+        name: "Stratège",
+        icon: "🧠",
+        color: "var(--violet)",
+        model: models.strategist || "—",
+        status: missions.some(m => m.status === "running") ? "running" : "idle",
+        tokensPerSec: 0,
+        lastTask: "En attente...",
+      },
+      {
+        id: "architect",
+        name: "Architecte",
+        icon: "⚡",
+        color: "var(--blue)",
+        model: models.architect || "—",
+        status: "idle",
+        tokensPerSec: 0,
+        lastTask: "En attente...",
+      },
+      {
+        id: "worker",
+        name: "Worker",
+        icon: "🔧",
+        color: "var(--amber)",
+        model: models.worker || "—",
+        status: "idle",
+        tokensPerSec: 0,
+        lastTask: "En attente...",
+      },
+      {
+        id: "vision",
+        name: "Vision",
+        icon: "👁",
+        color: "var(--cyan)",
+        model: models.vision || "—",
+        status: "idle",
+        tokensPerSec: 0,
+        lastTask: "En attente...",
+      },
+    ];
+  }, [status.models, missions]);
+
+  return (
+    <aside style={{
+      width: "var(--right-panel-w)",
+      flexShrink: 0,
+      borderLeft: "1px solid var(--border)",
+      background: "var(--surface)",
+      display: "flex",
+      flexDirection: "column",
+      height: "100%",
+      overflow: "hidden",
+    }}>
+      {/* ── StatusGrid (agents IA) ── */}
+      <div style={{ flexShrink: 0 }}>
+        <StatusGrid agents={agentsProp} />
+      </div>
+
+      {/* ── Séparateur ── */}
+      <div style={{ height: 1, background: "var(--border)", marginInline: 12, flexShrink: 0 }} />
+
+      {/* ── CostMeter (ressources / tokens) ── */}
+      <div style={{ padding: "12px 12px 8px", flexShrink: 0 }}>
+        <CostMeter totalTokens={totalTokens || undefined} />
+      </div>
+
+      {/* ── Séparateur ── */}
+      <div style={{ height: 1, background: "var(--border)", marginInline: 12, flexShrink: 0 }} />
+
+      {/* ── TelegramConsole (logs WS temps réel, scrollable) ── */}
+      <div style={{
+        flex: 1,
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        padding: "8px 12px 12px",
+        minHeight: 0,
+      }}>
+        <div style={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: "var(--text-3)",
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          marginBottom: 8,
+          flexShrink: 0,
+        }}>
+          Terminal
+        </div>
+        <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+          <TelegramConsole />
+        </div>
+      </div>
+    </aside>
+  );
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [missions,       setMissions]       = useState([]);
+  const [missions,        setMissions]        = useState([]);
   const [activeMissionId, setActiveMissionId] = useState(null);
-  const [status,         setStatus]         = useState({});
-  const [wsEvents,       setWsEvents]       = useState([]);
-  const [logs,           setLogs]           = useState([]);
-  const [sidebarView,    setSidebarView]    = useState("missions");
+  const [status,          setStatus]          = useState({});
+  const [wsEvents,        setWsEvents]        = useState([]);
+  const [logs,            setLogs]            = useState([]);
+  const [sidebarView,     setSidebarView]     = useState("missions");
 
   // ─── Chargement des données ─────────────────────────────────────────────────
   const loadMissions = useCallback(async () => {
@@ -179,7 +292,7 @@ export default function App() {
       background: "var(--bg)",
       overflow: "hidden",
     }}>
-      {/* ── Sidebar ── */}
+      {/* ── Sidebar gauche ── */}
       <Sidebar
         missions={missions}
         status={status}
@@ -190,7 +303,7 @@ export default function App() {
         logs={logs}
       />
 
-      {/* ── Zone principale ── */}
+      {/* ── Zone centrale ── */}
       <main style={{
         flex: 1,
         display: "flex",
@@ -217,6 +330,14 @@ export default function App() {
           onMissionComplete={handleMissionComplete}
         />
       </main>
+
+      {/* ── Panneau droit ── */}
+      <RightPanel
+        status={status}
+        missions={missions}
+        wsEvents={wsEvents}
+        logs={logs}
+      />
     </div>
   );
 }

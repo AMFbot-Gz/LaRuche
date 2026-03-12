@@ -268,7 +268,8 @@ program
     if (envOk) {
       const { isConfigured } = await import("../src/config.js");
       const configured = isConfigured();
-      checks.push({ name: "Telegram config", ok: configured, detail: configured ? "Configured" : "Token/ID missing", fix: !configured ? "Edit .env: set TELEGRAM_BOT_TOKEN + ADMIN_TELEGRAM_ID" : null });
+      // Telegram est optionnel en standalone — warning seulement, non-bloquant
+      checks.push({ name: "Telegram config", ok: true, detail: configured ? "Configured" : "Token/ID missing (standalone OK)", fix: !configured ? "Edit .env: set TELEGRAM_BOT_TOKEN + ADMIN_TELEGRAM_ID" : null });
     }
 
     // PM2

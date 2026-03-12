@@ -39,6 +39,15 @@
   --red:    #F87171;
   --yellow: #FBB24C;
   --blue:   #60A5FA;
+  --amber:      #F59E0B;
+  --amber-dim:  rgba(245, 158, 11, 0.15);
+  --violet:     #6366F1;
+  --violet-dim: rgba(99, 102, 241, 0.15);
+  --cyan:       #06B6D4;
+  --cyan-dim:   rgba(6, 182, 212, 0.15);
+
+  /* Right panel */
+  --right-panel-w: 270px;
 
   /* Sizing */
   --sidebar-w:  268px;
