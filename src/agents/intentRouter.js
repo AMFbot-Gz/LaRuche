@@ -254,6 +254,18 @@ const RULES = [
     build: (m) => steps(step('wait_for_element', { query: m[1].trim(), timeout: 10 }, `Attendre: ${m[1]}`)),
   },
 
+  // ── Liste des skills disponibles ──────────────────────────────────────────
+  {
+    test: /(?:liste?|list|affiche?|montre?|quels?\s+sont)\s+(?:les\s+)?skills?(?:\s+disponibles?)?|skills?\s+(?:disponibles?|dispo|actifs?)/i,
+    build: () => steps(step('http_fetch', { url: 'http://localhost:3000/api/skills' }, 'Liste skills disponibles')),
+  },
+
+  // ── État / status du système ───────────────────────────────────────────────
+  {
+    test: /(?:état|status|santé|health)\s+(?:du\s+)?(?:système|system|server|serveur|laruche|la\s+ruche|queen)/i,
+    build: () => steps(step('http_fetch', { url: 'http://localhost:3000/api/status' }, 'État du système')),
+  },
+
   // ── Semantic Computer-Use : lire arbre AX ─────────────────────────────────
   {
     test: /(?:arbre\s+ax|accessibility\s+tree|ax\s+tree|éléments?\s+accessibility)/i,

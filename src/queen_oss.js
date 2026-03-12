@@ -337,9 +337,27 @@ async function runComputerUseMission(command, missionId) {
       usePlaywright: false,  // désactivé par défaut — évite crash si Playwright absent
     });
 
+    // Extrait le contenu textuel d'un résultat de skill
+    const extractContent = (s) => {
+      const r = s.result;
+      if (!r?.success) return null;
+      // http_fetch retourne r.result
+      if (r.result && typeof r.result === 'string') return r.result.slice(0, 600);
+      // run_command / run_shell retournent r.output ou r.stdout
+      if (r.output && typeof r.output === 'string') return r.output.slice(0, 600);
+      if (r.stdout && typeof r.stdout === 'string') return r.stdout.slice(0, 600);
+      // message de skill (smart_click, find_element…)
+      if (r.message && typeof r.message === 'string') return r.message;
+      return null;
+    };
+
     const summary = result.success
       ? `✅ Mission accomplie en ${(result.duration / 1000).toFixed(1)}s\n\n` +
-        result.steps.map((s, i) => `${i + 1}. ${s.step.skill}: ${s.result?.success ? '✓' : '✗'}`).join('\n')
+        result.steps.map((s, i) => {
+          const ok = s.result?.success ? '✓' : '✗';
+          const content = extractContent(s);
+          return `${i + 1}. ${s.step.skill}: ${ok}${content ? '\n' + content : ''}`;
+        }).join('\n\n')
       : `⚠️ Partiellement complété (${result.steps.filter(s => s.result?.success !== false).length}/${result.steps.length} étapes)\n\n` +
         (result.error || 'Certaines étapes ont échoué');
 

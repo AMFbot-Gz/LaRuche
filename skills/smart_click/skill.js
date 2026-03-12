@@ -49,6 +49,22 @@ export async function run({ query = "", app = "", double = false } = {}) {
       };
     }
 
+    // Fallback: si query ressemble à un nom d'app, tenter open_app via AppleScript
+    const APP_NAMES = new Set(['safari','chrome','firefox','terminal','finder','spotify','slack','discord','zoom','mail','notes','calendar','photos','music','xcode','figma','sketch','vscode','vs code']);
+    const queryLower = query.toLowerCase().trim();
+    const looksLikeApp = APP_NAMES.has(queryLower) || /^[A-Z][a-zA-Z\s]+$/.test(query.trim());
+
+    if (looksLikeApp) {
+      try {
+        const appMap = { safari:'Safari', chrome:'Google Chrome', firefox:'Firefox', terminal:'Terminal', finder:'Finder', spotify:'Spotify', slack:'Slack', discord:'Discord', zoom:'Zoom', mail:'Mail', notes:'Notes', calendar:'Calendar', photos:'Photos', music:'Music', xcode:'Xcode', figma:'Figma', sketch:'Sketch', vscode:'Visual Studio Code', 'vs code':'Visual Studio Code' };
+        const appName = appMap[queryLower] || query.trim();
+        await execFileAsync('osascript', ['-e', `tell application "${appName}" to activate`], { timeout: 5000 });
+        return { success: true, clicked: appName, role: 'application', x: 0, y: 0, confidence: 0.9, message: `Application "${appName}" activée`, source: 'open_app_fallback' };
+      } catch (appErr) {
+        // ignore, fall through to error
+      }
+    }
+
     return {
       success: false,
       error: data.error || `Impossible de cliquer sur "${query}"`,
