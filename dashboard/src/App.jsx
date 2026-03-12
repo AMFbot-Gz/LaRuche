@@ -1,347 +1,147 @@
 /**
- * App.jsx — LaRuche HQ Dashboard
- * Layout 3 colonnes :
- *   • Sidebar gauche (navigation + historique missions)
- *   • Zone centrale (ChatFeed + Composer)
- *   • RightPanel (StatusGrid + CostMeter + TelegramConsole)
+ * App.jsx — LaRuche HQ Dashboard SaaS
+ * Navigation multi-pages, toast notifications, contrôle total sans terminal
  */
-
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import Sidebar         from "./components/Sidebar.jsx";
-import ChatFeed        from "./components/ChatFeed.jsx";
-import Composer        from "./components/Composer.jsx";
-import StatusGrid      from "./components/StatusGrid.jsx";
-import CostMeter       from "./components/CostMeter.jsx";
-import TelegramConsole from "./components/TelegramConsole.jsx";
+import { ToastProvider, useToast } from "./components/Toast.jsx";
+import NavBar from "./components/NavBar.jsx";
+import Overview  from "./components/pages/Overview.jsx";
+import Missions  from "./components/pages/Missions.jsx";
+import Agents    from "./components/pages/Agents.jsx";
+import Skills    from "./components/pages/Skills.jsx";
+import System    from "./components/pages/System.jsx";
+import Logs      from "./components/pages/Logs.jsx";
+import Settings  from "./components/pages/Settings.jsx";
 
 const QUEEN_API = import.meta.env.VITE_QUEEN_API || "http://localhost:3000";
 const WS_URL    = import.meta.env.VITE_WS_URL    || "ws://localhost:9001";
 
-// ─── Hook WebSocket avec reconnexion auto ─────────────────────────────────────
 function useWebSocket(url, onMessage) {
-  const wsRef        = useRef(null);
-  const reconnectRef = useRef(null);
-  const onMessageRef = useRef(onMessage);
-  onMessageRef.current = onMessage;
-
+  const wsRef = useRef(null);
+  const reconnRef = useRef(null);
+  const cbRef = useRef(onMessage);
+  cbRef.current = onMessage;
   useEffect(() => {
-    let active = true;
-
+    let alive = true;
     const connect = () => {
-      if (!active) return;
+      if (!alive) return;
       try {
         const ws = new WebSocket(url);
         wsRef.current = ws;
-
-        ws.onmessage = (e) => {
-          try { onMessageRef.current(JSON.parse(e.data)); } catch {}
-        };
-
-        ws.onclose = () => {
-          if (active) reconnectRef.current = setTimeout(connect, 3000);
-        };
-
+        ws.onmessage = e => { try { cbRef.current(JSON.parse(e.data)); } catch {} };
+        ws.onclose = () => { if (alive) reconnRef.current = setTimeout(connect, 3000); };
         ws.onerror = () => ws.close();
       } catch {}
     };
-
     connect();
-
-    return () => {
-      active = false;
-      clearTimeout(reconnectRef.current);
-      wsRef.current?.close();
-    };
+    return () => { alive = false; clearTimeout(reconnRef.current); wsRef.current?.close(); };
   }, [url]);
 }
 
-// ─── TopBar ───────────────────────────────────────────────────────────────────
-function TopBar({ status, view }) {
-  const labels = { missions: "Missions", agents: "Agents", logs: "Logs" };
-  const isOnline = status.status === "online";
-
+// TopBar globale
+function TopBar({ status, onRestart }) {
+  const isOnline = status?.status === "online";
+  const { toast } = useToast() || {};
+  const handleRestart = async () => {
+    if (!confirm("Redémarrer LaRuche ?")) return;
+    try {
+      await fetch(`${QUEEN_API}/api/process/restart`, { method: "POST" });
+      toast?.("Redémarrage en cours...", "warn");
+    } catch { toast?.("Erreur de redémarrage", "error"); }
+  };
   return (
     <div style={{
-      height: 52,
-      borderBottom: "1px solid var(--border)",
-      display: "flex",
-      alignItems: "center",
-      paddingInline: 24,
-      justifyContent: "space-between",
-      flexShrink: 0,
-      background: "var(--surface)",
+      height: 52, background: "var(--surface)", borderBottom: "1px solid var(--border)",
+      display: "flex", alignItems: "center", paddingInline: 20, gap: 16, flexShrink: 0,
     }}>
-      <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text)", letterSpacing: "-0.01em" }}>
-        {labels[view] || "Missions"}
+      <div style={{ flex: 1, fontSize: 13, color: "var(--text-3)" }}>
+        {status?.ollama?.ok && <span style={{ color: "var(--text-3)" }}>Ollama {status.ollama.latencyMs}ms · </span>}
+        <span style={{ color: "var(--text-3)" }}>{status?.missions?.total || 0} missions · </span>
+        <span style={{ color: "var(--text-3)" }}>uptime {Math.floor((status?.uptime || 0) / 60)}m</span>
       </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-        {/* Ollama latency */}
-        {status.ollama && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-            <span style={{
-              width: 6, height: 6, borderRadius: "50%",
-              background: status.ollama.ok ? "var(--green)" : "var(--red)",
-              boxShadow: status.ollama.ok ? "0 0 6px var(--green)" : "none",
-            }} />
-            <span style={{ color: "var(--text-3)" }}>
-              Ollama {status.ollama.ok ? `${status.ollama.latencyMs}ms` : "offline"}
-            </span>
-          </div>
-        )}
-
-        {/* API status */}
-        <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: "50%",
-            background: isOnline ? "var(--green)" : "var(--red)",
-            boxShadow: isOnline ? "0 0 6px var(--green)" : "none",
-          }} />
-          <span style={{ color: "var(--text-3)" }}>
-            {isOnline ? `API ${status.version || "3.2.0"}` : "Déconnecté"}
-          </span>
-        </div>
-
-        {/* Uptime */}
-        {status.uptime && (
-          <div style={{ fontSize: 11, color: "var(--text-3)" }}>
-            {Math.floor(status.uptime / 60)}m uptime
-          </div>
-        )}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{
+          width: 8, height: 8, borderRadius: "50%",
+          background: isOnline ? "var(--green)" : "var(--red)",
+          boxShadow: isOnline ? "0 0 8px var(--green)" : "none",
+          display: "inline-block",
+        }} />
+        <span style={{ fontSize: 12, color: isOnline ? "var(--green)" : "var(--red)", fontWeight: 500 }}>
+          {isOnline ? "Online" : "Offline"}
+        </span>
+        <button
+          onClick={handleRestart}
+          title="Redémarrer LaRuche"
+          style={{
+            background: "var(--surface-3)", border: "1px solid var(--border-2)",
+            borderRadius: 6, padding: "5px 12px", color: "var(--text-2)",
+            fontSize: 12, cursor: "pointer", marginLeft: 8,
+          }}
+        >↺ Restart</button>
       </div>
     </div>
   );
 }
 
-// ─── RightPanel — StatusGrid + CostMeter + TelegramConsole ───────────────────
-function RightPanel({ status, missions, wsEvents, logs }) {
-  // Calcul des tokens totaux depuis les missions pour CostMeter
-  const totalTokens = missions.reduce((acc, m) => acc + (m.tokens || 0), 0) || undefined;
+// Pages map
+const PAGES = { overview: Overview, missions: Missions, agents: Agents, skills: Skills, system: System, logs: Logs, settings: Settings };
 
-  // Dérivation des agents depuis status.models pour StatusGrid
-  const agentsProp = React.useMemo(() => {
-    const models = status.models || {};
-    if (Object.keys(models).length === 0) return undefined; // laisse StatusGrid gérer le fetch
-    return [
-      {
-        id: "strategist",
-        name: "Stratège",
-        icon: "🧠",
-        color: "var(--violet)",
-        model: models.strategist || "—",
-        status: missions.some(m => m.status === "running") ? "running" : "idle",
-        tokensPerSec: 0,
-        lastTask: "En attente...",
-      },
-      {
-        id: "architect",
-        name: "Architecte",
-        icon: "⚡",
-        color: "var(--blue)",
-        model: models.architect || "—",
-        status: "idle",
-        tokensPerSec: 0,
-        lastTask: "En attente...",
-      },
-      {
-        id: "worker",
-        name: "Worker",
-        icon: "🔧",
-        color: "var(--amber)",
-        model: models.worker || "—",
-        status: "idle",
-        tokensPerSec: 0,
-        lastTask: "En attente...",
-      },
-      {
-        id: "vision",
-        name: "Vision",
-        icon: "👁",
-        color: "var(--cyan)",
-        model: models.vision || "—",
-        status: "idle",
-        tokensPerSec: 0,
-        lastTask: "En attente...",
-      },
-    ];
-  }, [status.models, missions]);
-
-  return (
-    <aside style={{
-      width: "var(--right-panel-w)",
-      flexShrink: 0,
-      borderLeft: "1px solid var(--border)",
-      background: "var(--surface)",
-      display: "flex",
-      flexDirection: "column",
-      height: "100%",
-      overflow: "hidden",
-    }}>
-      {/* ── StatusGrid (agents IA) ── */}
-      <div style={{ flexShrink: 0 }}>
-        <StatusGrid agents={agentsProp} />
-      </div>
-
-      {/* ── Séparateur ── */}
-      <div style={{ height: 1, background: "var(--border)", marginInline: 12, flexShrink: 0 }} />
-
-      {/* ── CostMeter (ressources / tokens) ── */}
-      <div style={{ padding: "12px 12px 8px", flexShrink: 0 }}>
-        <CostMeter totalTokens={totalTokens || undefined} />
-      </div>
-
-      {/* ── Séparateur ── */}
-      <div style={{ height: 1, background: "var(--border)", marginInline: 12, flexShrink: 0 }} />
-
-      {/* ── TelegramConsole (logs WS temps réel, scrollable) ── */}
-      <div style={{
-        flex: 1,
-        overflow: "hidden",
-        display: "flex",
-        flexDirection: "column",
-        padding: "8px 12px 12px",
-        minHeight: 0,
-      }}>
-        <div style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: "var(--text-3)",
-          textTransform: "uppercase",
-          letterSpacing: "0.06em",
-          marginBottom: 8,
-          flexShrink: 0,
-        }}>
-          Terminal
-        </div>
-        <div style={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-          <TelegramConsole />
-        </div>
-      </div>
-    </aside>
-  );
-}
-
-// ─── App ──────────────────────────────────────────────────────────────────────
-export default function App() {
-  const [missions,        setMissions]        = useState([]);
-  const [activeMissionId, setActiveMissionId] = useState(null);
-  const [status,          setStatus]          = useState({});
-  const [wsEvents,        setWsEvents]        = useState([]);
-  const [logs,            setLogs]            = useState([]);
-  const [sidebarView,     setSidebarView]     = useState("missions");
-  const [suggestedCommand, setSuggestedCommand] = useState("");
-
-  // ─── Chargement des données ─────────────────────────────────────────────────
-  const loadMissions = useCallback(async () => {
-    try {
-      const r = await fetch(`${QUEEN_API}/api/missions?limit=20`);
-      if (r.ok) {
-        const d = await r.json();
-        setMissions(d.missions || []);
-      }
-    } catch {}
-  }, []);
+function AppInner() {
+  const [page, setPage] = useState("overview");
+  const [status, setStatus] = useState({});
+  const [wsEvents, setWsEvents] = useState([]);
+  const [missionCount, setMissionCount] = useState(0);
+  const { toast } = useToast() || {};
 
   const loadStatus = useCallback(async () => {
     try {
       const r = await fetch(`${QUEEN_API}/api/status`);
-      if (r.ok) setStatus(await r.json());
+      if (r.ok) {
+        const d = await r.json();
+        setStatus(d);
+        setMissionCount(d.missions?.total || 0);
+      }
     } catch {}
   }, []);
 
   useEffect(() => {
-    loadMissions();
     loadStatus();
-    const interval = setInterval(() => { loadMissions(); loadStatus(); }, 6000);
+    const interval = setInterval(loadStatus, 8000);
     return () => clearInterval(interval);
-  }, [loadMissions, loadStatus]);
+  }, [loadStatus]);
 
-  // ─── WebSocket events ───────────────────────────────────────────────────────
-  useWebSocket(WS_URL, useCallback((event) => {
-    const ts = new Date().toLocaleTimeString("fr-FR");
-    setWsEvents(prev => [...prev.slice(-100), event]);
-    setLogs(prev => [
-      ...prev.slice(-200),
-      `[${ts}] ${event.type}${event.command ? " · " + event.command.substring(0, 50) : ""}`,
-    ]);
-    if (event.type === "mission_complete" || event.type === "mission_error") {
-      loadMissions();
+  useWebSocket(WS_URL, useCallback(event => {
+    setWsEvents(prev => [...prev.slice(-200), event]);
+    if (event.type === "mission_complete") {
+      toast?.(`Mission terminée en ${((event.mission?.duration || 0) / 1000).toFixed(1)}s`, "success");
+      loadStatus();
     }
-  }, [loadMissions]));
+    if (event.type === "mission_error") {
+      toast?.(`Mission échouée: ${event.error?.substring(0, 60)}`, "error");
+    }
+    if (event.type === "mission_start") {
+      toast?.(`Mission démarrée`, "info", 2000);
+    }
+  }, [toast, loadStatus]));
 
-  // ─── Handlers mission ───────────────────────────────────────────────────────
-  const handleMissionStart = useCallback((id, cmd) => {
-    setActiveMissionId(id);
-    setSidebarView("missions");
-    const ts = new Date().toLocaleTimeString("fr-FR");
-    setLogs(prev => [...prev.slice(-200), `[${ts}] mission_start · ${cmd.substring(0, 60)}`]);
-  }, []);
-
-  const handleMissionComplete = useCallback((mission) => {
-    loadMissions();
-    const ts = new Date().toLocaleTimeString("fr-FR");
-    setLogs(prev => [
-      ...prev.slice(-200),
-      `[${ts}] mission_${mission.status} · ${(mission.duration / 1000).toFixed(1)}s`,
-    ]);
-  }, [loadMissions]);
-
+  const PageComponent = PAGES[page] || Overview;
   return (
-    <div style={{
-      display: "flex",
-      height: "100vh",
-      background: "var(--bg)",
-      overflow: "hidden",
-    }}>
-      {/* ── Sidebar gauche ── */}
-      <Sidebar
-        missions={missions}
-        status={status}
-        activeMissionId={activeMissionId}
-        onSelectMission={setActiveMissionId}
-        view={sidebarView}
-        onViewChange={setSidebarView}
-        logs={logs}
-      />
-
-      {/* ── Zone centrale ── */}
-      <main style={{
-        flex: 1,
-        display: "flex",
-        flexDirection: "column",
-        overflow: "hidden",
-        minWidth: 0,
-        background: "var(--bg)",
-      }}>
-        {/* TopBar */}
-        <TopBar status={status} view={sidebarView} />
-
-        {/* Feed conversations */}
-        <ChatFeed
-          missions={missions}
-          activeMissionId={activeMissionId}
-          wsEvents={wsEvents}
-          onRefresh={loadMissions}
-          onSuggest={setSuggestedCommand}
-        />
-
-        {/* Composer */}
-        <Composer
-          status={status}
-          onMissionStart={handleMissionStart}
-          onMissionComplete={handleMissionComplete}
-          prefillCommand={suggestedCommand}
-          onPrefillConsumed={() => setSuggestedCommand("")}
-        />
-      </main>
-
-      {/* ── Panneau droit ── */}
-      <RightPanel
-        status={status}
-        missions={missions}
-        wsEvents={wsEvents}
-        logs={logs}
-      />
+    <div style={{ display: "flex", height: "100vh", background: "var(--bg)", overflow: "hidden" }}>
+      <NavBar activePage={page} onNavigate={setPage} missionCount={missionCount} />
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+        <TopBar status={status} />
+        <main style={{ flex: 1, overflowY: "auto", overflowX: "hidden" }}>
+          <PageComponent status={status} wsEvents={wsEvents} onNavigate={setPage} />
+        </main>
+      </div>
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ToastProvider>
+      <AppInner />
+    </ToastProvider>
   );
 }

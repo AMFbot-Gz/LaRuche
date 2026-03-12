@@ -58,6 +58,14 @@ export function startStandaloneServer(deps) {
         "GET  /api/agents",
         "POST /api/search",
         "GET  /api/health",
+        "GET  /api/system",
+        "GET  /api/logs",
+        "GET  /api/skills",
+        "POST /api/skills/:name/run",
+        "DELETE /api/skills/:name",
+        "GET  /api/config",
+        "POST /api/mission/:id/cancel",
+        "POST /api/process/restart",
       ],
     })
   );

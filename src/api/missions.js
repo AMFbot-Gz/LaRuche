@@ -239,4 +239,143 @@ export function createMissionsRoutes(app, deps) {
   app.get("/api/health", (c) => {
     return c.json({ ok: true, ts: Date.now() });
   });
+
+  // ─── GET /api/system ─────────────────────────────────────────────────────────
+  app.get("/api/system", async (c) => {
+    try {
+      const si = await import("systeminformation");
+      const [cpu, mem, disk, proc] = await Promise.all([
+        si.default.currentLoad(),
+        si.default.mem(),
+        si.default.fsSize(),
+        si.default.processes(),
+      ]);
+      const ollamaProc = proc.list?.filter(p => p.name?.toLowerCase().includes("ollama")) || [];
+      return c.json({
+        cpu: { load: Math.round(cpu.currentLoad) },
+        memory: {
+          total: mem.total,
+          used: mem.used,
+          free: mem.free,
+          percent: Math.round((mem.used / mem.total) * 100),
+        },
+        disk: disk.slice(0, 2).map(d => ({
+          fs: d.fs, size: d.size, used: d.used,
+          percent: Math.round(d.use),
+        })),
+        ollama: { running: ollamaProc.length > 0 },
+      });
+    } catch (e) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // ─── GET /api/logs ───────────────────────────────────────────────────────────
+  app.get("/api/logs", async (c) => {
+    const lines = parseInt(c.req.query("lines") || "100", 10);
+    try {
+      const { readFileSync, existsSync } = await import("fs");
+      const logFile = "/tmp/queen.log";
+      let raw = existsSync(logFile) ? readFileSync(logFile, "utf-8") : "";
+      const allLines = raw.split("\n").filter(Boolean);
+      const recent = allLines.slice(-lines);
+      return c.json({ lines: recent, total: allLines.length });
+    } catch {
+      return c.json({ lines: [], total: 0 });
+    }
+  });
+
+  // ─── GET /api/skills ─────────────────────────────────────────────────────────
+  app.get("/api/skills", async (c) => {
+    try {
+      const { readFileSync, existsSync, readdirSync, statSync } = await import("fs");
+      const { join } = await import("path");
+      const SKILLS_DIR = join(process.cwd(), "skills");
+      if (!existsSync(SKILLS_DIR)) return c.json({ skills: [] });
+      const dirs = readdirSync(SKILLS_DIR).filter(d => {
+        try { return statSync(join(SKILLS_DIR, d)).isDirectory(); } catch { return false; }
+      });
+      const skills = dirs.map(d => {
+        try {
+          const m = JSON.parse(readFileSync(join(SKILLS_DIR, d, "manifest.json"), "utf-8"));
+          const hasSkill = existsSync(join(SKILLS_DIR, d, "skill.js"));
+          return { ...m, name: d, hasSkill };
+        } catch { return { name: d, description: "No manifest" }; }
+      });
+      return c.json({ skills });
+    } catch (e) { return c.json({ skills: [], error: e.message }); }
+  });
+
+  // ─── POST /api/skills/:name/run ──────────────────────────────────────────────
+  app.post("/api/skills/:name/run", async (c) => {
+    const name = c.req.param("name");
+    let params = {};
+    try { params = await c.req.json(); } catch {}
+    try {
+      const { runSkill } = await import("../skill_runner.js");
+      const result = await runSkill(name, params);
+      return c.json({ success: true, result });
+    } catch (e) { return c.json({ success: false, error: e.message }, 400); }
+  });
+
+  // ─── DELETE /api/skills/:name ─────────────────────────────────────────────────
+  app.delete("/api/skills/:name", async (c) => {
+    const name = c.req.param("name");
+    try {
+      const { rmSync, existsSync } = await import("fs");
+      const { join } = await import("path");
+      const dir = join(process.cwd(), "skills", name);
+      if (!existsSync(dir)) return c.json({ error: "Skill introuvable" }, 404);
+      rmSync(dir, { recursive: true, force: true });
+      return c.json({ success: true });
+    } catch (e) { return c.json({ success: false, error: e.message }, 500); }
+  });
+
+  // ─── GET /api/config ─────────────────────────────────────────────────────────
+  app.get("/api/config", async (c) => {
+    try {
+      const { readFileSync, existsSync } = await import("fs");
+      const { join } = await import("path");
+      // .env (masquer les tokens)
+      const envPath = join(process.cwd(), ".env");
+      let envVars = {};
+      if (existsSync(envPath)) {
+        readFileSync(envPath, "utf-8").split("\n").forEach(line => {
+          const [k, ...v] = line.split("=");
+          if (k?.trim() && !k.startsWith("#")) {
+            const val = v.join("=").trim();
+            const isSensitive = /token|key|secret|password/i.test(k);
+            envVars[k.trim()] = isSensitive && val ? "***" : val;
+          }
+        });
+      }
+      // .laruche/config.json
+      const cfgPath = join(process.cwd(), ".laruche/config.json");
+      const cfg = existsSync(cfgPath) ? JSON.parse(readFileSync(cfgPath, "utf-8")) : {};
+      return c.json({ env: envVars, config: cfg });
+    } catch (e) { return c.json({ error: e.message }, 500); }
+  });
+
+  // ─── POST /api/mission/:id/cancel ────────────────────────────────────────────
+  app.post("/api/mission/:id/cancel", (c) => {
+    const id = c.req.param("id");
+    const m = activeMissions.get(id);
+    if (!m) return c.json({ error: "Mission introuvable" }, 404);
+    if (m.status !== "pending" && m.status !== "running") {
+      return c.json({ error: "Mission déjà terminée" }, 400);
+    }
+    updateMission(id, { status: "cancelled", completedAt: new Date().toISOString() });
+    broadcastHUD({ type: "mission_cancelled", missionId: id });
+    return c.json({ success: true });
+  });
+
+  // ─── POST /api/process/restart ───────────────────────────────────────────────
+  app.post("/api/process/restart", async (c) => {
+    // On broadcaste l'event puis on schedule un restart dans 1s
+    broadcastHUD({ type: "system_restart", message: "Redémarrage planifié dans 1s..." });
+    setTimeout(() => {
+      process.exit(0); // PM2 / superviseur relancera
+    }, 1000);
+    return c.json({ success: true, message: "Redémarrage en cours..." });
+  });
 }
