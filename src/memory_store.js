@@ -39,9 +39,8 @@ confidence: ${entry.confidence || "medium"}
 ${entry.content}
 `;
 
-  const currentContent = mem.raw || "# LaRuche Memory
-
-";
+  // fix: \n escapé au lieu d'un LF littéral dans la string
+  const currentContent = mem.raw || "# LaRuche Memory\n\n";
   writeFileSync(MEMORY_PATH, currentContent + newBlock);
 }
 
@@ -78,7 +77,6 @@ let _lastStoredMissionId = null;
 let _storageTimeout = null;
 
 export async function storeMissionMemory(mission) {
-  // Prevent duplicate storage of the same mission result within 2 seconds
   const missionId = `${mission.goal}_${mission.success}_${mission.steps?.length}`;
   if (_lastStoredMissionId === missionId) return;
 
@@ -87,7 +85,6 @@ export async function storeMissionMemory(mission) {
   _storageTimeout = setTimeout(async () => {
     _lastStoredMissionId = missionId;
     try {
-      // 1. Stocker dans vault (ChromaDB)
       const { execa } = await import("execa");
       const rpc = JSON.stringify({
         jsonrpc: "2.0",
@@ -111,7 +108,6 @@ export async function storeMissionMemory(mission) {
         reject: false,
       }).catch(() => {});
 
-      // 2. Extraire leçon et stocker dans MEMORY.md
       const lesson = await extractLesson(mission);
       if (lesson) {
         mkdirSync(join(ROOT, "workspace/memory"), { recursive: true });
