@@ -1,5 +1,5 @@
-name: 💡 Feature Request
-description: Proposer une nouvelle fonctionnalité pour LaRuche
+name: "✨ Demande de fonctionnalité"
+description: "Proposer une nouvelle idée pour améliorer LaRuche — toutes les idées sont les bienvenues ! 🌟"
 title: "[Feature] "
 labels: ["enhancement", "needs-discussion"]
 
@@ -7,57 +7,79 @@ body:
   - type: markdown
     attributes:
       value: |
-        Merci de proposer une amélioration pour LaRuche !
+        ## 💡 Merci de proposer une amélioration !
+        Vos idées font avancer LaRuche. Soyez aussi précis que possible pour nous aider à comprendre votre besoin.
 
   - type: dropdown
     id: category
     attributes:
-      label: Catégorie
+      label: "🏷️ Catégorie"
+      description: "Dans quel domaine se situe votre idée ?"
       options:
-        - 🤖 Agents & IA
-        - 💬 Bot Telegram
-        - 🖥️ Dashboard / HUD
-        - 🔧 Tools & MCP
-        - 🧩 Skills
-        - 🔒 Sécurité
-        - 🖥️ CLI
-        - 📚 Documentation
-        - Autre
+        - "🤖 Agents & IA"
+        - "🐝 Bot Telegram"
+        - "🎨 Dashboard / Interface"
+        - "⚡ Performance"
+        - "🔒 Sécurité"
+        - "🔧 Configuration"
+        - "📚 Documentation"
+        - "🌐 API / Intégrations"
+        - "💡 Autre"
     validations:
       required: true
 
   - type: textarea
     id: problem
     attributes:
-      label: Problème à résoudre
-      placeholder: "Je dois souvent faire X manuellement et ce serait utile si LaRuche pouvait..."
+      label: "🚩 Problème actuel"
+      description: "Quelle limitation ou frustration vous a amené à cette idée ?"
+      placeholder: "Ex: Il n'est pas possible de faire X, ce qui oblige à Y de manière manuelle..."
     validations:
       required: true
 
   - type: textarea
     id: solution
     attributes:
-      label: Solution proposée
+      label: "🌟 Solution proposée"
+      description: "Décrivez la fonctionnalité idéale selon vous."
+      placeholder: "Je voudrais que LaRuche puisse..."
     validations:
       required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: "🔄 Alternatives envisagées"
+      description: "Y a-t-il d'autres approches que vous avez considérées ?"
+      placeholder: "J'ai essayé X mais ça ne convient pas car..."
 
   - type: dropdown
     id: priority
     attributes:
-      label: Priorité selon vous
+      label: "🔥 Priorité estimée"
+      description: "Selon vous, quelle urgence a cette fonctionnalité ?"
       options:
-        - 🔴 Critique
-        - 🟠 Haute
-        - 🟡 Moyenne
-        - 🟢 Basse
+        - "🟢 Faible — Nice to have"
+        - "🟡 Moyenne — Serait très utile"
+        - "🔴 Haute — Bloque mon usage"
     validations:
       required: true
 
-  - type: checkboxes
-    id: contribution
+  - type: textarea
+    id: context
     attributes:
-      label: Contribution
+      label: "📎 Contexte supplémentaire"
+      description: "Captures d'écran, liens, exemples d'autres projets qui font ça bien..."
+      placeholder: "Par exemple, le projet X fait ça de cette façon : [lien]"
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: "✅ Checklist avant de poster"
       options:
-        - label: Je serais prêt(e) à implémenter cette feature (PR)
-        - label: Je peux aider à tester
-        - label: Je peux aider à documenter
+        - label: "J'ai vérifié que cette fonctionnalité n'existe pas déjà"
+          required: true
+        - label: "J'ai cherché dans les issues existantes pour éviter les doublons"
+          required: true
+        - label: "Je suis prêt·e à contribuer si on me guide 🚀"
+          required: false
