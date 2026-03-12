@@ -21,6 +21,7 @@ import { startCronRunner } from "./cron_runner.js";
 import { isStandaloneMode, startStandaloneServer } from "./modes/standalone.js";
 import { updateMission, appendMissionEvent } from "./api/missions.js";
 import { runIntentPipeline, isComputerUseIntent } from "./agents/intentPipeline.js";
+import { isActionIntent } from "./agents/intentRouter.js";
 
 dotenv.config();
 
@@ -287,8 +288,8 @@ Réponse courte et directe.`;
 }
 
 export async function runMission(command, missionId) {
-  // Routage : computer-use → MCP pipeline, sinon → butterfly loop LLM
-  if (isComputerUseIntent(command)) {
+  // Routage : règle déterministe ou computer-use → pipeline direct, sinon → butterfly LLM
+  if (isActionIntent(command) || isComputerUseIntent(command)) {
     return runComputerUseMission(command, missionId);
   }
   return butterflyLoop(command, async () => {}, missionId);

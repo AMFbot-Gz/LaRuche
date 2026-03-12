@@ -10,6 +10,7 @@ import { ask } from "../model_router.js";
 import { execa } from "execa";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { executeSequence } from './executor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "../../");
@@ -210,30 +211,13 @@ export async function runIntentPipeline(intent, {
     await callMCP("playwright_mcp.js", "pw.launch", { browser: "chromium" }, 15000).catch(() => {});
   }
 
-  const results = [];
-  let allOk = true;
+  const execution = await executeSequence(planResult.steps, {
+    hudFn,
+    stopOnError: false,
+  });
 
-  for (let i = 0; i < planResult.steps.length; i++) {
-    const step = planResult.steps[i];
-    hudFn?.({ type: "thinking", agent: "Operator", thought: `${i + 1}/${planResult.steps.length}: ${step.skill}` });
-
-    let result = await executeStep(step, hudFn, useVision);
-
-    if (result?.success === false) {
-      const correctedStep = await tryAutoCorrect(step, result.error, hudFn);
-      if (correctedStep) {
-        hudFn?.({ type: "thinking", agent: "Self-Correct", thought: `Retry: ${correctedStep.skill}` });
-        result = await executeStep(correctedStep, hudFn, useVision);
-      }
-    }
-
-    results.push({ step, result });
-    onStepDone?.(i + 1, planResult.steps.length, step, result);
-    if (result?.success === false) allOk = false;
-
-    if (i < planResult.steps.length - 1)
-      await new Promise(r => setTimeout(r, useVision ? 800 : 500));
-  }
+  const results = execution.results;
+  const allOk = execution.success;
 
   const duration = Date.now() - startTime;
   hudFn?.({ type: "mission_complete", duration });

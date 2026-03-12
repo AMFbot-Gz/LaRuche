@@ -5,6 +5,7 @@
 
 import { callLLM } from "../llm/callLLM.js";
 import { getAllSkills, getRelevantSkills, formatSkillsForPrompt } from "../skills/skillLoader.js";
+import { routeByRules } from './intentRouter.js';
 
 // ─── Prompt système planner ────────────────────────────────────────────────────────────
 function buildPlannerPrompt(intent, skills) {
@@ -41,6 +42,12 @@ export function isComputerUseIntent(text) {
 // ─── Fonction principale ───────────────────────────────────────────────────────────
 export async function plan(intent, options = {}) {
   const { timeout = 20000 } = options;
+
+  // 1. Essayer le routeur déterministe (zéro LLM, zéro erreur)
+  const routed = routeByRules(intent);
+  if (routed.matched) {
+    return { ...routed.plan, model: 'rules-engine' };
+  }
 
   // 15 skills les plus pertinents pour cette intention
   const skills = getRelevantSkills(intent, 15);
