@@ -1,8 +1,14 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 Discussions
+  - name: "💬 Discussions & Questions"
     url: https://github.com/AMFbot-Gz/LaRuche/discussions
-    about: Questions, idées, showcase de votre usage de LaRuche
-  - name: 📖 Documentation
+    about: "Posez vos questions, partagez vos idées et votre usage de LaRuche 🐝"
+  - name: "📚 Documentation"
     url: https://github.com/AMFbot-Gz/LaRuche/tree/main/docs
-    about: Consultez la documentation avant d'ouvrir une issue
+    about: "Consultez la documentation complète avant d'ouvrir une issue"
+  - name: "🚧 Roadmap du projet"
+    url: https://github.com/AMFbot-Gz/LaRuche/discussions/categories/roadmap
+    about: "Découvrez les fonctionnalités planifiées et votez pour vos préférées 🚀"
+  - name: "✨ Showcase — Partagez votre setup"
+    url: https://github.com/AMFbot-Gz/LaRuche/discussions/categories/show-tell
+    about: "Montrez comment vous utilisez LaRuche et inspirez la communauté !"
