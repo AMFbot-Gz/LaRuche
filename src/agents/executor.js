@@ -171,13 +171,27 @@ export async function executeStep(step, { hudFn, maxRetries = 1 } = {}) {
 }
 
 /**
- * Exécute une séquence de steps dans l'ordre
- * @returns {{ success: boolean, results: any[], duration: number }}
+ * Exécute une séquence de steps dans l'ordre.
+ *
+ * v4.2 : distingue explicitement success / partial / failed
+ *   - success : tous les steps ont réussi
+ *   - partial : au moins 1 step réussi ET au moins 1 échoué
+ *   - failed  : tous les steps ont échoué (ou stopOnError déclenché dès le 1er échec)
+ *
+ * @returns {{
+ *   success: boolean,
+ *   status: 'success'|'partial'|'failed',
+ *   results: any[],
+ *   duration: number,
+ *   successCount: number,
+ *   totalCount: number,
+ *   completedSteps: number,
+ *   totalSteps: number,
+ * }}
  */
 export async function executeSequence(steps, { hudFn, stopOnError = false } = {}) {
   const results = [];
-  const start = Date.now();
-  let allOk = true;
+  const start   = Date.now();
 
   for (let i = 0; i < steps.length; i++) {
     const step = steps[i];
@@ -186,10 +200,7 @@ export async function executeSequence(steps, { hudFn, stopOnError = false } = {}
     const result = await executeStep(step, { hudFn });
     results.push({ step, ...result });
 
-    if (!result.success) {
-      allOk = false;
-      if (stopOnError) break;
-    }
+    if (!result.success && stopOnError) break;
 
     // Pause entre steps pour laisser macOS traiter l'action
     if (i < steps.length - 1) {
@@ -197,11 +208,20 @@ export async function executeSequence(steps, { hudFn, stopOnError = false } = {}
     }
   }
 
+  const successCount = results.filter(r => r.success).length;
+  const status = successCount === steps.length ? 'success'
+    : successCount > 0 ? 'partial'
+    : 'failed';
+
   return {
-    success: allOk,
+    success: status === 'success',
+    status,
     results,
     duration: Date.now() - start,
-    completedSteps: results.filter(r => r.success).length,
+    successCount,
+    totalCount: steps.length,
+    // Alias pour rétrocompatibilité
+    completedSteps: successCount,
     totalSteps: steps.length,
   };
 }

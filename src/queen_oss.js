@@ -446,10 +446,42 @@ subagentManager.setDeps({ logger, broadcastHUD, runMission });
 logger.info("🐝 SubagentManager initialisé — sous-agents: " +
   subagentManager.list().map(a => `${a.icon} ${a.name}`).join(", "));
 
+// ─── Health check Ollama au démarrage ─────────────────────────────────────────
+/**
+ * Vérifie la disponibilité d'Ollama et la présence des modèles requis.
+ * Stocke le résultat dans process.env.OLLAMA_AVAILABLE ('true'|'false').
+ * @returns {Promise<boolean>}
+ */
+async function checkOllamaHealth() {
+  const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+  try {
+    const r = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const { models } = await r.json();
+    const names = models.map(m => m.name);
+    const required = ['llama3.2:3b', 'llama3:latest'];
+    const missing = required.filter(m => !names.some(n => n.startsWith(m.split(':')[0])));
+    if (missing.length) {
+      logger.warn(`[Init] Modèles Ollama manquants: ${missing.join(', ')} — certaines fonctions limitées`);
+    } else {
+      logger.info(`[Init] Ollama OK — ${names.length} modèles disponibles`);
+    }
+    process.env.OLLAMA_AVAILABLE = 'true';
+    return true;
+  } catch (e) {
+    logger.error(`[Init] Ollama inaccessible: ${e.message} — mode dégradé activé`);
+    process.env.OLLAMA_AVAILABLE = 'false';
+    return false;
+  }
+}
+
 // ─── Démarrage ───────────────────────────────────────────────────────────────────────────────
 logger.info("╔══════════════════════════════════════════╗");
 logger.info(`║ 🐝 LaRuche OSS v4.1 — ${STANDALONE ? "Standalone    " : "Telegram mode"} ║`);
 logger.info("╚══════════════════════════════════════════╝");
+
+// Vérifie Ollama avant de démarrer l'API (Wave 2 — abstraction LLM)
+await checkOllamaHealth();
 
 // Démarrage du serveur HUD WebSocket (après validation config, avec gestion EADDRINUSE)
 wss = startHUDServer();

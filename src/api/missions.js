@@ -156,6 +156,9 @@ export function appendMissionEvent(id, event) {
 export function createMissionsRoutes(app, deps) {
   const { loadMissions, runMission, autoDetectRoles, broadcastHUD, logger } = deps;
 
+  // Injecte broadcastHUD dans le scope module pour le cleanup timeout
+  _broadcastHUD = broadcastHUD;
+
   // ─── POST /api/mission ──────────────────────────────────────────────────────
   app.post("/api/mission", async (c) => {
     // Rate limiting

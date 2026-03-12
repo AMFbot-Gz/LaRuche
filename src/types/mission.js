@@ -1,8 +1,51 @@
 /**
  * mission.js — Structures de données immuables pour les missions LaRuche v4.1
  * createMission, updateMissionState, addMissionStep, addModelUsed, finalizeMission
+ *
+ * v4.2 : statuts normalisés + transitions validées (Wave 1 — fiabilité missions)
  */
 import { randomUUID } from 'crypto';
+
+// ─── Statuts normalisés ────────────────────────────────────────────────────────
+export const MissionStatus = {
+  PENDING:   'pending',
+  RUNNING:   'running',
+  SUCCESS:   'success',
+  PARTIAL:   'partial',    // certains steps ont échoué
+  FAILED:    'failed',     // mission complètement échouée
+  CANCELLED: 'cancelled',
+  TIMEOUT:   'timeout',
+};
+
+// Transitions autorisées (machine d'état stricte)
+export const VALID_TRANSITIONS = {
+  pending:   ['running', 'cancelled'],
+  running:   ['success', 'partial', 'failed', 'timeout', 'cancelled'],
+  success:   [],  // terminal
+  partial:   [],  // terminal
+  failed:    [],  // terminal
+  cancelled: [],  // terminal
+  timeout:   [],  // terminal
+};
+
+/**
+ * Indique si un statut est terminal (aucune transition possible).
+ * @param {string} status
+ * @returns {boolean}
+ */
+export function isTerminal(status) {
+  return ['success', 'partial', 'failed', 'cancelled', 'timeout'].includes(status);
+}
+
+/**
+ * Vérifie si la transition de `from` vers `to` est autorisée.
+ * @param {string} from
+ * @param {string} to
+ * @returns {boolean}
+ */
+export function canTransition(from, to) {
+  return VALID_TRANSITIONS[from]?.includes(to) ?? false;
+}
 
 /**
  * Crée une nouvelle mission.
