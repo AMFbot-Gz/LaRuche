@@ -5,6 +5,11 @@ import React, { useState, useEffect, useRef } from "react";
 
 const QUEEN_API = import.meta.env.VITE_QUEEN_API || "http://localhost:3000";
 
+// Strip ANSI escape codes (ex: \u001b[32minfo\u001b[39m → info)
+function stripAnsi(line) {
+  return line.replace(/\x1b\[[0-9;]*m/g, "");
+}
+
 function colorLine(line) {
   if (/\[error\]|\[err\]/i.test(line)) return "var(--red)";
   if (/\[warn\]/i.test(line)) return "var(--yellow)";
@@ -14,9 +19,10 @@ function colorLine(line) {
 }
 
 function LogLine({ line }) {
+  const clean = stripAnsi(line);
   return (
-    <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, lineHeight:1.7, color:colorLine(line), wordBreak:"break-all" }}>
-      {line}
+    <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:12, lineHeight:1.7, color:colorLine(clean), wordBreak:"break-all" }}>
+      {clean}
     </div>
   );
 }
@@ -45,9 +51,10 @@ export default function Logs() {
   }, [lines, autoScroll]);
 
   const filtered = filter === "all" ? lines : lines.filter(l => {
-    if (filter === "error") return /\[error\]/i.test(l);
-    if (filter === "warn")  return /\[warn\]/i.test(l);
-    if (filter === "info")  return /\[info\]/i.test(l);
+    const clean = stripAnsi(l);
+    if (filter === "error") return /\[error\]/i.test(clean);
+    if (filter === "warn")  return /\[warn\]/i.test(clean);
+    if (filter === "info")  return /\[info\]/i.test(clean);
     return true;
   });
 

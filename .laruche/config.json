@@ -2,7 +2,7 @@
   "version": "3.0.0",
   "name": "LaRuche SINGULARITY",
   "maxKimiInstances": 10,
-  "costAlertUSD": 2.00,
+  "costAlertUSD": 2.0,
   "tempPurgeIntervalMin": 10,
   "logTTLHours": 24,
   "ramLimitMB": 500,
@@ -16,12 +16,11 @@
   "dashboardPort": 8080,
   "apiPort": 3000,
   "models": {
-    "strategist": null,
-    "architect": null,
-    "worker": null,
-    "vision": null,
-    "visionFast": null,
-    "synthesizer": null,
-    "_comment": "null = auto-detect depuis Ollama. Remplacer par nom exact pour forcer un modele."
+    "strategist": "llama3:latest",
+    "architect": "llama3.2:3b",
+    "worker": "llama3.2:3b",
+    "vision": "llava:7b",
+    "visionFast": "moondream:latest",
+    "synthesizer": "llama3:latest"
   }
 }

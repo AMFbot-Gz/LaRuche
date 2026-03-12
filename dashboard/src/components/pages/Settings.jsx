@@ -118,7 +118,7 @@ export default function Settings() {
           color:"var(--text-2)", borderRadius:"var(--radius)", padding:"9px 18px",
           fontSize:13, cursor:"pointer",
         }}>↺ Recharger</button>
-        <button onClick={()=>window.open("vscode://file/Users/wiaamhadara/LaRuche/.env")} style={{
+        <button onClick={()=>window.open("vscode://file//Users/wiaamhadara/LaRuche/.env")} style={{
           background:"var(--primary-dim)", border:"1px solid rgba(224,123,84,0.3)",
           color:"var(--primary)", borderRadius:"var(--radius)", padding:"9px 18px",
           fontSize:13, fontWeight:600, cursor:"pointer",

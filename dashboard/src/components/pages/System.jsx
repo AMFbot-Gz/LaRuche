@@ -58,7 +58,7 @@ function CpuGauge({ value = 0, size = 120 }) {
 
 // ─── Bar de ressource (RAM, Disk) ─────────────────────────────────────────────
 function ResourceBar({ label, used, total, unit = "Go" }) {
-  const pct   = total > 0 ? (used / total) * 100 : 0;
+  const pct   = total > 0 ? Math.min(100, (used / total) * 100) : 0;
   const color = pct > 85 ? "var(--red)" : pct > 65 ? "var(--yellow)" : "var(--green)";
 
   return (
@@ -211,8 +211,11 @@ export default function System() {
   const cpu    = sysData?.cpu?.percent    || sysData?.cpu    || 0;
   const ramUsed  = sysData?.ram?.used    || sysData?.memory?.used  || 0;
   const ramTotal = sysData?.ram?.total   || sysData?.memory?.total || 0;
-  const diskUsed  = sysData?.disk?.used  || 0;
-  const diskTotal = sysData?.disk?.total || 0;
+  // L'API retourne disk comme un tableau [{fs, size, used, percent}] — on prend le premier disque principal
+  const diskArr   = Array.isArray(sysData?.disk) ? sysData.disk : [];
+  const mainDisk  = diskArr[0] || sysData?.disk || {};
+  const diskUsed  = mainDisk.used  || 0;
+  const diskTotal = mainDisk.size  || mainDisk.total || 0;
 
   // Statuts
   const uptimeSec     = status?.uptime || 0;

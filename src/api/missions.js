@@ -161,7 +161,7 @@ export function createMissionsRoutes(app, deps) {
     return c.json({
       status: "online",
       mode: "standalone",
-      version: process.env.npm_package_version || "3.2.0",
+      version: process.env.npm_package_version || "4.1.0",
       uptime: Math.floor(process.uptime()),
       ollama: {
         ok: ollamaOk,

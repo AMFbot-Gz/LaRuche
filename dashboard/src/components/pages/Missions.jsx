@@ -211,7 +211,7 @@ export default function Missions({ status, onNavigate }) {
                       {fmtDuration(m.duration)}
                     </span>
                     <span style={{ fontSize:11, color:"var(--text-3)", flexShrink:0, minWidth:80, textAlign:"right" }}>
-                      {fmtDate(m.ts)}
+                      {fmtDate(m.startedAt || m.ts)}
                     </span>
                   </div>
                 </div>
@@ -258,7 +258,7 @@ export default function Missions({ status, onNavigate }) {
             <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16, fontSize:12, color:"var(--text-3)" }}>
               <div>ID : <span style={{ color:"var(--text-2)", fontFamily:"monospace" }}>{selected.id}</span></div>
               <div>Durée : <span style={{ color:"var(--text-2)" }}>{fmtDuration(selected.duration)}</span></div>
-              <div>Date : <span style={{ color:"var(--text-2)" }}>{selected.ts ? new Date(selected.ts).toLocaleString("fr-FR") : "—"}</span></div>
+              <div>Date : <span style={{ color:"var(--text-2)" }}>{(selected.startedAt || selected.ts) ? new Date(selected.startedAt || selected.ts).toLocaleString("fr-FR") : "—"}</span></div>
               {selected.models?.length > 0 && (
                 <div>Modèles : <span style={{ color:"var(--text-2)" }}>{selected.models.join(", ")}</span></div>
               )}
