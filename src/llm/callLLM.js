@@ -24,13 +24,13 @@ const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '120000');
  * @throws {LaRucheError} LLM_TIMEOUT si tous les essais échouent
  */
 export async function callLLM(prompt, options = {}) {
-  const { mission_id, step_id, role, temperature } = options;
+  const { mission_id, step_id, role, temperature, num_predict } = options;
   const callId = `llm_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
   for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
     const t0 = Date.now();
     try {
-      const result = await ask(prompt, { role, temperature, timeout: LLM_TIMEOUT_MS });
+      const result = await ask(prompt, { role, temperature, timeout: LLM_TIMEOUT_MS, num_predict });
       // ask() n'émet pas d'exception — on vérifie explicitement success
       if (!result.success) {
         throw new Error(result.error || 'Ollama non disponible');

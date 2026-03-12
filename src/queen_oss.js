@@ -168,22 +168,29 @@ export async function butterflyLoop(command, replyFn = async () => {}, missionId
   const roles = await autoDetectRoles();
 
   try {
+    // Fast path : commande simple → 1 seule tâche worker, sans planification
+    const isSimple = command.length < 80 && !/plan|stratégi|analys|architec|décompos/i.test(command);
+    if (isSimple) {
+      broadcastHUD({ type: "plan_ready", tasks: 1, missionId: mission.id });
+      if (missionId) appendMissionEvent(missionId, { type: "plan_ready", tasks: [{ description: command }] });
+      const fastResult = await callLLM(command, { role: "worker", temperature: 0.3, mission_id: mission.id, step_id: "fast" });
+      mission = addModelUsed(mission, fastResult.model);
+      const finalText = fastResult.text;
+      mission = finalizeMission(mission, { status: 'success', result: finalText });
+      saveMission({ id: mission.id, command, status: "success", duration: mission.duration_ms, models: mission.models_used, result: finalText, ts: mission.completed_at });
+      broadcastHUD({ type: "mission_complete", duration: mission.duration_ms, missionId: mission.id });
+      if (missionId) updateMission(missionId, { status: "success", result: finalText, duration: mission.duration_ms, models: mission.models_used, completedAt: mission.completed_at });
+      return finalText;
+    }
+
     // 1. Stratégie
     await replyFn(`🧠 Analyse stratégique avec **${roles.strategist}**...`, { parse_mode: "Markdown" });
     broadcastHUD({ type: "thinking", agent: "Stratège", thought: "Planification...", missionId: mission.id });
     if (missionId) appendMissionEvent(missionId, { type: "thinking", agent: "strategist" });
 
-    const planPrompt = `Tu es le stratège de LaRuche.
-Mission: "${command}"
-
-Décompose en 2-4 micro-tâches JSON:
-{
-  "mission": "résumé court",
-  "tasks": [
-    {"id": 1, "description": "...", "role": "worker"}
-  ]
-}
-Réponds UNIQUEMENT en JSON valide.`;
+    const planPrompt = `Stratège LaRuche. Mission: "${command.substring(0, 200)}"
+JSON uniquement:{"mission":"résumé","tasks":[{"id":1,"description":"tâche","role":"worker"}]}
+2-3 tâches max. Rôles: worker|architect|vision`;
 
     const planResult = await callLLM(planPrompt, {
       role: "strategist",
@@ -231,11 +238,9 @@ Réponds UNIQUEMENT en JSON valide.`;
 
     // 3. Synthèse
     broadcastHUD({ type: "thinking", agent: "Synthèse", thought: "Finalisation...", missionId: mission.id });
-    const synthPrompt = `Synthétise ces résultats en une réponse claire:
-${results.map((r, i) => `[${i + 1}] ${r.result.substring(0, 300)}`).join("\n\n")}
-
-Objectif: ${plan.mission}
-Réponse directe, sans répéter les étapes.`;
+    const synthPrompt = `Synthèse directe pour: ${plan.mission}
+${results.map((r, i) => `[${i+1}] ${r.result.substring(0, 250)}`).join("\n")}
+Réponse courte et directe.`;
 
     const synthesis = await callLLM(synthPrompt, {
       role: "synthesizer",

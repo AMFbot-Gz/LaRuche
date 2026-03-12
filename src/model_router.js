@@ -149,6 +149,7 @@ export async function ask(prompt, options = {}) {
     task = prompt,
     temperature = 0.3,
     timeout = 60000,
+    num_predict = null,
   } = options;
 
   const roles = await autoDetectRoles();
@@ -160,7 +161,23 @@ export async function ask(prompt, options = {}) {
     const res = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt, stream: false, options: { temperature } }),
+      body: JSON.stringify({
+        model,
+        prompt,
+        stream: false,
+        keep_alive: -1,
+        options: {
+          temperature,
+          num_predict: num_predict || parseInt(process.env.LLM_NUM_PREDICT || "700"),
+          num_ctx: parseInt(process.env.LLM_NUM_CTX || "4096"),
+          num_thread: parseInt(process.env.LLM_NUM_THREAD || "0"),
+          top_k: 20,
+          top_p: 0.9,
+          repeat_penalty: 1.1,
+          low_vram: false,
+          f16_kv: true,
+        },
+      }),
       signal: AbortSignal.timeout(timeout),
     });
     if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
