@@ -5,10 +5,10 @@
 
 import { createServer } from "http";
 import { WebSocketServer, WebSocket } from "ws";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import Database from "better-sqlite3";
+import initSqlJs from "sql.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -16,8 +16,32 @@ dotenv.config();
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
 const PORT = 8080;
+const DB_PATH = join(ROOT, ".laruche/shadow-errors.db");
 
-const db = new Database(join(ROOT, ".laruche/shadow-errors.db"), { readonly: true });
+// sql.js — chargement async puis accès synchrone
+const SQL = await initSqlJs();
+const db = existsSync(DB_PATH)
+  ? new SQL.Database(readFileSync(DB_PATH))
+  : new SQL.Database();
+
+// Helper drop-in pour remplacer better-sqlite3 .prepare().get() et .all()
+function dbGet(sql, params = []) {
+  try {
+    const stmt = db.prepare(sql);
+    stmt.bind(params);
+    if (stmt.step()) { const row = stmt.getAsObject(); stmt.free(); return row; }
+    stmt.free(); return null;
+  } catch { return null; }
+}
+function dbAll(sql, params = []) {
+  try {
+    const stmt = db.prepare(sql);
+    stmt.bind(params);
+    const rows = [];
+    while (stmt.step()) rows.push(stmt.getAsObject());
+    stmt.free(); return rows;
+  } catch { return []; }
+}
 
 // Cache registry.json avec invalidation toutes les 30s
 let _registryCache = null;
@@ -44,7 +68,7 @@ const server = createServer((req, res) => {
   // GET /api/status
   if (url.pathname === "/api/status" && req.method === "GET") {
     try {
-      const missions = db.prepare("SELECT COUNT(*) as total FROM missions").get();
+      const missions = dbGet("SELECT COUNT(*) as total FROM missions");
       res.writeHead(200);
       res.end(JSON.stringify({
         status: "online",
@@ -63,9 +87,7 @@ const server = createServer((req, res) => {
   // GET /api/missions
   if (url.pathname === "/api/missions" && req.method === "GET") {
     try {
-      const missions = db.prepare(
-        "SELECT * FROM missions ORDER BY id DESC LIMIT 50"
-      ).all();
+      const missions = dbAll("SELECT * FROM missions ORDER BY id DESC LIMIT 50");
       res.writeHead(200);
       res.end(JSON.stringify({ missions }));
     } catch (e) {
@@ -80,12 +102,12 @@ const server = createServer((req, res) => {
     try {
       const today = new Date().toISOString().split("T")[0];
       // Une seule requête au lieu de 2 SELECT séquentiels
-      const row = db.prepare(`
+      const row = dbGet(`
         SELECT
           SUM(CASE WHEN timestamp LIKE ? THEN cost_usd ELSE 0 END) as daily,
           SUM(cost_usd) as total
         FROM token_usage
-      `).get(`${today}%`);
+      `, [`${today}%`]);
       res.writeHead(200);
       res.end(JSON.stringify({ daily: row?.daily || 0, total: row?.total || 0 }));
     } catch (e) {

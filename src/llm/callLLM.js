@@ -8,6 +8,8 @@ import { LaRucheError, ErrorCode } from '../utils/errorHandler.js';
 
 const MAX_RETRIES = parseInt(process.env.LLM_MAX_RETRIES || '2');
 const BASE_DELAY_MS = parseInt(process.env.LLM_BASE_DELAY_MS || '1000');
+// Timeout par appel LLM — 120s par défaut pour les modèles cloud lents
+const LLM_TIMEOUT_MS = parseInt(process.env.LLM_TIMEOUT_MS || '120000');
 
 /**
  * Appel LLM avec retry exponentiel et logs structurés.
@@ -28,7 +30,7 @@ export async function callLLM(prompt, options = {}) {
   for (let attempt = 1; attempt <= MAX_RETRIES + 1; attempt++) {
     const t0 = Date.now();
     try {
-      const result = await ask(prompt, { role, temperature });
+      const result = await ask(prompt, { role, temperature, timeout: LLM_TIMEOUT_MS });
       // ask() n'émet pas d'exception — on vérifie explicitement success
       if (!result.success) {
         throw new Error(result.error || 'Ollama non disponible');
