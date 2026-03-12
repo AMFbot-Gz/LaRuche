@@ -57,6 +57,24 @@ laruche start
 
 ---
 
+## Quick Start
+
+Mode standalone (API REST sans Telegram) :
+
+1. `npm install`
+2. `cp .env.example .env` (configure TELEGRAM_TOKEN si besoin)
+3. `ollama serve` (dans un terminal séparé)
+4. `node src/queen_oss.js` (mode standalone)
+   ou `npm run standalone`
+
+API disponible sur `http://localhost:3000` :
+- `GET  /api/health` — Vérifie que le serveur tourne
+- `GET  /api/status` — État d'Ollama, missions, modèles actifs
+- `POST /api/mission` — Lance une mission `{ "command": "..." }`
+- `GET  /api/missions` — Historique des missions
+
+---
+
 ## 🏗️ Architecture
 
 ```
