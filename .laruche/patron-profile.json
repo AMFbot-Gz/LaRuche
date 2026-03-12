@@ -1,18 +1,49 @@
 {
-  "identity": {
-    "timezone": "Europe/Paris",
-    "active_hours": { "start": "09:00", "end": "02:00" },
-    "language_pref": "FR avec termes techniques EN"
+  "version": "2.0.0",
+  "updated": "2026-03-12T00:00:00.000Z",
+  "patron": {
+    "name": "Wiaam",
+    "preferences": {
+      "language": "fr",
+      "verbosity": "concise",
+      "codeStyle": "ESM modules, async/await, no unnecessary comments"
+    }
   },
-  "work_style": {
-    "file_organization": "strict",
-    "temp_purge_interval": 60,
-    "notification_level": "minimal",
-    "confirmation_threshold": 2.00
+  "project": {
+    "name": "LaRuche",
+    "description": "OS Agent multi-modèles local sur macOS. Orchestration d'agents IA via Ollama pour exécuter des missions complexes sans cloud.",
+    "useCases": [
+      "Automatisation macOS (open app, screenshot, browser control)",
+      "Analyse et résumé de code/projets",
+      "Génération de code et de scripts",
+      "Recherche web et extraction d'information",
+      "Pipeline multi-agents : stratégie → exécution parallèle → synthèse",
+      "Surveillance système (CPU, RAM, Ollama)",
+      "Gestion de skills dynamiques"
+    ],
+    "notUsedFor": [
+      "Remplacer Claude ou GPT-4 (modèles locaux limités)",
+      "Traitement d'images complexes (llava:7b est basique)",
+      "Long documents > 4096 tokens"
+    ],
+    "strengths": [
+      "100% local, zéro coût après setup",
+      "Vie privée totale (rien ne sort du Mac)",
+      "Computer Use natif macOS (AppleScript + screencapture)",
+      "Dashboard SaaS complet sans terminal",
+      "Fast path missions simples en 1.3s",
+      "Extensible via skills JS/Python"
+    ]
   },
-  "learned_rules": [],
-  "platform_knowledge": {},
-  "session_count": 0,
-  "total_tasks_completed": 0,
-  "last_updated": null
+  "systemContext": "LaRuche tourne sur un Mac 16GB RAM, CPU only (pas de GPU dédié). Les modèles locaux font ~12 tok/s. Préférer des commandes courtes et précises pour le fast path. Pour les missions complexes, le butterfly loop décompose en 2-3 sous-tâches parallèles.",
+  "exampleMissions": [
+    "prends un screenshot",
+    "ouvre safari sur github.com",
+    "liste les 10 plus gros fichiers du projet",
+    "résume l'architecture de ce projet en 5 points",
+    "génère un script bash pour sauvegarder les logs",
+    "analyse le fichier package.json et explique les dépendances clés",
+    "crée un skill pour surveiller l'espace disque toutes les heures",
+    "ouvre VSCode dans le dossier LaRuche"
+  ]
 }

@@ -9,30 +9,11 @@ import { getAllSkills, getRelevantSkills, formatSkillsForPrompt } from "../skill
 // ─── Prompt système planner ────────────────────────────────────────────────────────────
 function buildPlannerPrompt(intent, skills) {
   const skillList = formatSkillsForPrompt(skills);
-  return `Tu es le Planner de LaRuche, un agent IA qui contrôle un PC macOS.
-
-SKILLS DISPONIBLES:
-${skillList}
-
-RÈGLES ABSOLUES:
-1. Réponds UNIQUEMENT avec un objet JSON valide — aucun texte avant ou après.
-2. Décompose toujours en étapes atomiques dans "steps".
-3. Utilise UNIQUEMENT les skills listés ci-dessus (exactement ces noms).
-4. Si un paramètre est ambigu (ex: quelle musique?), choisis une valeur par défaut raisonnable.
-5. Ne demande JAMAIS de précision à l'utilisateur — planifie avec les infos disponibles.
-6. Minimum de steps nécessaires — pas de redondance.
-
-FORMAT DE SORTIE (JSON strict):
-{
-  "goal": "description courte de l'objectif en français",
-  "confidence": 0.0-1.0,
-  "steps": [
-    { "skill": "nom_du_skill", "params": { "cle": "valeur" } }
-  ]
-}
-
-INTENTION UTILISATEUR: "${intent}"
-Réponds maintenant avec le JSON plan:`;
+  return `Planner LaRuche macOS. Skills: ${skillList}
+Règles: JSON seul. Steps atomiques. Skills exacts de la liste. Valeurs par défaut si ambigu.
+Format: {"goal":"objectif","confidence":0.9,"steps":[{"skill":"nom","params":{}}]}
+Intention: "${intent}"
+JSON:`;
 }
 
 // ─── Détection d'intention computer-use ──────────────────────────────────────────────
@@ -65,8 +46,8 @@ export async function plan(intent, options = {}) {
   const skills = getRelevantSkills(intent, 15);
   const prompt = buildPlannerPrompt(intent, skills);
 
-  const mode = process.env.LARUCHE_MODE || "balanced";
-  const role = mode === "low" ? "worker" : "strategist";
+  // Toujours utiliser worker (llama3.2:3b) pour le planner — plus rapide, JSON simple
+  const role = "worker";
 
   let result;
   try {

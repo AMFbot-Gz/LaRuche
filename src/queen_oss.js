@@ -300,6 +300,8 @@ export async function runMission(command, missionId) {
  */
 async function runComputerUseMission(command, missionId) {
   logger.info(`🖥️ Computer-use détecté → IntentPipeline`, { mission_id: missionId });
+  // Passer immédiatement en "running" pour le dashboard
+  if (missionId) updateMission(missionId, { status: "running" });
 
   // hudFn : broadcast HUD + append event dans le store API
   const hudFn = (event) => {
