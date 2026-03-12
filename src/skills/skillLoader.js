@@ -40,7 +40,7 @@ const BUILTIN_SKILLS = [
 // ─── Cache ────────────────────────────────────────────────────────────────────────────
 let _cache = null;
 let _cacheTs = 0;
-const CACHE_TTL_MS = 30_000;
+const CACHE_TTL_MS = 300_000 // 5 min;
 
 // ─── Parser YAML frontmatter minimaliste ─────────────────────────────────────────────────
 function parseFrontmatter(raw) {

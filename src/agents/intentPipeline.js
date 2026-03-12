@@ -32,7 +32,7 @@ async function callMCP(serverFile, toolName, args = {}, timeout = 20000) {
       const { stdout, stderr } = await execa("node", [join(ROOT, "mcp_servers", serverFile)], {
         input: rpcRequest,
         cwd: ROOT,
-        timeout: timeout * attempt,
+        timeout,  // Timeout fixe — pas exponentiel (évite 8s+16s+24s=48s total)
         reject: false,
       });
 

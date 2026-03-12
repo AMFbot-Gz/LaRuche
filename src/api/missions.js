@@ -16,6 +16,39 @@ export const activeMissions = new Map();
 // Durée de rétention des missions terminées dans le store in-memory (5 min)
 const RETENTION_MS = 5 * 60 * 1000;
 
+// ─── Rate limiting simple ──────────────────────────────────────────────────────
+// Limite : 30 requêtes/minute par IP (protection spam missions)
+const _rateLimitMap = new Map(); // ip → { count, resetAt }
+const RATE_LIMIT = 30;
+const RATE_WINDOW_MS = 60_000;
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let entry = _rateLimitMap.get(ip);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + RATE_WINDOW_MS };
+    _rateLimitMap.set(ip, entry);
+  }
+  entry.count++;
+  if (entry.count > RATE_LIMIT) return false;
+  // Nettoyage des entrées expirées (toutes les 100 calls)
+  if (_rateLimitMap.size > 1000) {
+    for (const [k, v] of _rateLimitMap) { if (now > v.resetAt) _rateLimitMap.delete(k); }
+  }
+  return true;
+}
+
+// ─── Nettoyage périodique des missions en mémoire (>10 min) ────────────────────
+const CLEANUP_MS = 10 * 60 * 1000;
+setInterval(() => {
+  const cutoff = Date.now() - CLEANUP_MS;
+  for (const [id, m] of activeMissions) {
+    if (m.startedAt && new Date(m.startedAt).getTime() < cutoff) {
+      activeMissions.delete(id);
+    }
+  }
+}, CLEANUP_MS).unref();
+
 /**
  * Crée une entrée de mission in-memory
  */
@@ -78,6 +111,12 @@ export function createMissionsRoutes(app, deps) {
 
   // ─── POST /api/mission ──────────────────────────────────────────────────────
   app.post("/api/mission", async (c) => {
+    // Rate limiting
+    const ip = c.req.header("x-forwarded-for") || c.req.header("x-real-ip") || "local";
+    if (!checkRateLimit(ip)) {
+      return c.json({ error: "Rate limit dépassé (30 req/min)" }, 429);
+    }
+
     let body;
     try {
       body = await c.req.json();

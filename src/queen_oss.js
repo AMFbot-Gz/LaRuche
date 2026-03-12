@@ -21,7 +21,6 @@ import { startCronRunner } from "./cron_runner.js";
 import { isStandaloneMode, startStandaloneServer } from "./modes/standalone.js";
 import { updateMission, appendMissionEvent } from "./api/missions.js";
 import { runIntentPipeline, isComputerUseIntent } from "./agents/intentPipeline.js";
-import { isActionIntent } from "./agents/intentRouter.js";
 import { learn, memoryStats } from "./learning/missionMemory.js";
 
 dotenv.config();
@@ -145,11 +144,29 @@ function startHUDServer() {
   return server;
 }
 
+// ─── WebSocket broadcast avec batching 50ms ───────────────────────────────────
+// Évite les centaines de send() individuels pour les missions rapides
+let _hudBatch = [];
+let _hudFlushTimer = null;
+
 export function broadcastHUD(event) {
-  const msg = JSON.stringify({ ...event, ts: Date.now() });
-  hudClients.forEach((ws) => {
-    if (ws.readyState === 1) ws.send(msg);
-  });
+  _hudBatch.push({ ...event, ts: Date.now() });
+  if (!_hudFlushTimer) {
+    _hudFlushTimer = setTimeout(() => {
+      _hudFlushTimer = null;
+      if (_hudBatch.length === 0) return;
+      const batch = _hudBatch.splice(0);
+      // Envoie batch OU single selon taille
+      const payload = batch.length === 1
+        ? JSON.stringify(batch[0])
+        : JSON.stringify({ type: 'batch', events: batch });
+      hudClients.forEach((ws) => {
+        if (ws.readyState === 1) {
+          try { ws.send(payload); } catch {}
+        }
+      });
+    }, 50);
+  }
 }
 
 // ─── Butterfly Loop (Cœur IA) v4.1 ────────────────────────────────────────────────────────────
