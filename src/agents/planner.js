@@ -3,7 +3,7 @@
  * Dynamic via skillLoader.js — fini les BUILTIN_SKILLS hardcodés
  */
 
-import { ask } from "../model_router.js";
+import { callLLM } from "../llm/callLLM.js";
 import { getAllSkills, getRelevantSkills, formatSkillsForPrompt } from "../skills/skillLoader.js";
 
 // ─── Prompt système planner ────────────────────────────────────────────────────────────
@@ -68,10 +68,15 @@ export async function plan(intent, options = {}) {
   const mode = process.env.LARUCHE_MODE || "balanced";
   const role = mode === "low" ? "worker" : "strategist";
 
-  const result = await ask(prompt, { role, temperature: 0.1, timeout });
+  let result;
+  try {
+    result = await callLLM(prompt, { role, temperature: 0.1 });
+  } catch (err) {
+    return { goal: intent, confidence: 0, steps: [], error: err.message };
+  }
 
-  if (!result.success || !result.text) {
-    return { goal: intent, confidence: 0, steps: [], error: result.error };
+  if (!result.text) {
+    return { goal: intent, confidence: 0, steps: [], error: 'Réponse LLM vide' };
   }
 
   try {

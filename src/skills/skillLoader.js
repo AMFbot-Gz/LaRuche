@@ -44,7 +44,7 @@ const CACHE_TTL_MS = 30_000;
 
 // ─── Parser YAML frontmatter minimaliste ─────────────────────────────────────────────────
 function parseFrontmatter(raw) {
-  const match = raw.match(/^---\n([\s\S]*?)\n---/);
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!match) return {};
   const lines = match[1].split('\n');
   const result = {};

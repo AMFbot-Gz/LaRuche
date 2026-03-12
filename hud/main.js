@@ -1,15 +1,56 @@
 /**
  * hud/main.js — Ghost-Monitor HUD LaRuche
  * Fenêtre Electron transparente, always-on-top, click-through
- * WebSocket port 9001 ← flux temps réel depuis queen.js
+ *
+ * IMPORTANT: Le HUD se connecte en CLIENT WebSocket au serveur queen_oss.js (port 9001).
+ * Il n'ouvre plus son propre serveur WSS pour éviter le conflit EADDRINUSE.
+ * Les événements reçus de queen sont transmis au renderer React via IPC.
  */
 
 const { app, BrowserWindow, globalShortcut, ipcMain, screen } = require("electron");
-const { WebSocketServer } = require("ws");
+const { WebSocket } = require("ws");
 const path = require("path");
 
 let win = null;
-let wss = null;
+let hudWs = null;
+const HUD_PORT = parseInt(process.env.HUD_PORT || "9001", 10);
+const HUD_TOKEN = process.env.HUD_TOKEN || null;
+const RECONNECT_DELAY_MS = 3000;
+
+// ─── Connexion WS vers queen_oss (client, pas serveur) ───────────────────────
+function connectToQueen() {
+  const url = HUD_TOKEN
+    ? `ws://localhost:${HUD_PORT}?token=${HUD_TOKEN}`
+    : `ws://localhost:${HUD_PORT}`;
+
+  hudWs = new WebSocket(url);
+
+  hudWs.on("open", () => {
+    console.log(`🐝 LaRuche HUD connecté à queen_oss — ws://localhost:${HUD_PORT}`);
+  });
+
+  hudWs.on("message", (data) => {
+    try {
+      const event = JSON.parse(data.toString());
+      // Transmet l'événement au renderer React
+      if (win && !win.isDestroyed()) {
+        win.webContents.send("hud-event", event);
+      }
+    } catch {}
+  });
+
+  hudWs.on("close", () => {
+    console.log(`⚠️ HUD: Connexion perdue — reconnexion dans ${RECONNECT_DELAY_MS}ms`);
+    setTimeout(connectToQueen, RECONNECT_DELAY_MS);
+  });
+
+  hudWs.on("error", (err) => {
+    // Erreur silencieuse — queen n'est peut-être pas encore démarrée
+    if (err.code !== "ECONNREFUSED") {
+      console.warn(`HUD WebSocket error: ${err.message}`);
+    }
+  });
+}
 
 app.whenReady().then(() => {
   const { width, height } = screen.getPrimaryDisplay().workAreaSize;
@@ -52,34 +93,15 @@ app.whenReady().then(() => {
     if (isIgnoring) win.focus();
   });
 
-  // WebSocket Server — Port 9001 — Flux temps réel depuis queen.js
-  wss = new WebSocketServer({ port: 9001 });
-  wss.on("connection", (ws) => {
-    ws.on("message", (data) => {
-      try {
-        const event = JSON.parse(data.toString());
-        // Transmet l'événement au renderer React
-        if (win && !win.isDestroyed()) {
-          win.webContents.send("hud-event", event);
-        }
-      } catch {}
-    });
-
-    // Confirme la connexion
-    ws.send(JSON.stringify({ type: "connected", ts: Date.now() }));
-  });
-
-  console.log("🐝 LaRuche HUD actif — Port WS 9001");
+  // Connexion WS vers queen_oss
+  connectToQueen();
 });
 
-// IPC pour HITL (Human-in-the-Loop)
+// IPC pour HITL (Human-in-the-Loop) — réponse du renderer vers queen via WS
 ipcMain.on("hitl-response", (event, { approved, missionId }) => {
-  // Diffuser la réponse HITL à tous les clients WS
-  wss?.clients.forEach((ws) => {
-    if (ws.readyState === 1) {
-      ws.send(JSON.stringify({ type: "hitl_response", approved, missionId }));
-    }
-  });
+  if (hudWs && hudWs.readyState === WebSocket.OPEN) {
+    hudWs.send(JSON.stringify({ type: "hitl_response", approved, missionId }));
+  }
 });
 
 app.on("window-all-closed", () => {
@@ -88,5 +110,5 @@ app.on("window-all-closed", () => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
-  wss?.close();
+  hudWs?.close();
 });
