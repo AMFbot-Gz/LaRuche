@@ -1,0 +1,91 @@
+# GPU Policy — Politique de modèles par classe de tâche
+# Contrôle quelle classe de modèle Ollama utiliser pour chaque type de traitement.
+# Modifier ici pour optimiser la charge GPU sans toucher au code.
+
+version: "1.0"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CLASSES DE TÂCHES
+# Chaque classe définit : modèle, max_tokens, temperature, timeout
+# ─────────────────────────────────────────────────────────────────────────────
+
+task_classes:
+
+  # Routing / Classification — décision légère, réponse courte
+  routing:
+    model: "${OLLAMA_MODEL_WORKER:-llama3.2:3b}"
+    max_tokens: 200
+    temperature: 0.0
+    timeout_ms: 10000
+    description: "Détection d'intent, classification, routage"
+
+  # Planification — génération de plan JSON structuré
+  planning:
+    model: "${OLLAMA_MODEL_STRATEGIST:-glm-4.6}"
+    max_tokens: 800
+    temperature: 0.1
+    timeout_ms: 30000
+    description: "Décomposition en sous-tâches, plan JSON"
+
+  # Exécution — workers parallèles (tâches individuelles)
+  execution:
+    model: "${OLLAMA_MODEL_WORKER:-llama3.2:3b}"
+    max_tokens: 1500
+    temperature: 0.2
+    timeout_ms: 45000
+    description: "Exécution de sous-tâches, appels outils"
+
+  # Synthèse — consolidation des résultats
+  synthesis:
+    model: "${OLLAMA_MODEL_WORKER:-llama3.2:3b}"
+    max_tokens: 2000
+    temperature: 0.3
+    timeout_ms: 30000
+    description: "Fusion et résumé des résultats workers"
+
+  # Code — génération, analyse et refactor de code
+  code:
+    model: "${OLLAMA_MODEL_ARCHITECT:-qwen3-coder}"
+    max_tokens: 4000
+    temperature: 0.05
+    timeout_ms: 120000
+    description: "Génération de code, analyse, refactoring"
+
+  # Vision — analyse d'image/écran (coûteux, déclenché explicitement)
+  vision:
+    model: "${OLLAMA_MODEL_VISION:-llama3.2-vision}"
+    max_tokens: 1000
+    temperature: 0.1
+    timeout_ms: 60000
+    enabled: "${VISION_ENABLED:-true}"
+    max_per_mission: 3          # Limite de captures par mission
+    description: "Analyse d'écran, identification UI"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# MODES GLOBAUX
+# Override tout le mapping par un preset
+# ─────────────────────────────────────────────────────────────────────────────
+
+modes:
+
+  low:       # Mode économie d'énergie — tout sur llama3.2:3b
+    routing: { model: "llama3.2:3b" }
+    planning: { model: "llama3.2:3b" }
+    execution: { model: "llama3.2:3b" }
+    synthesis: { model: "llama3.2:3b" }
+    code: { model: "llama3.2:3b" }
+    vision: { enabled: false }
+
+  balanced:  # Mode équilibré (défaut)
+    # Utilise les valeurs de task_classes ci-dessus
+
+  high:      # Mode performance maximum
+    routing: { model: "${OLLAMA_MODEL_STRATEGIST:-glm-4.6}" }
+    planning: { model: "${OLLAMA_MODEL_STRATEGIST:-glm-4.6}" }
+    execution: { model: "${OLLAMA_MODEL_ARCHITECT:-qwen3-coder}" }
+    synthesis: { model: "${OLLAMA_MODEL_STRATEGIST:-glm-4.6}" }
+    code: { model: "${OLLAMA_MODEL_ARCHITECT:-qwen3-coder:32b}" }
+    vision: { enabled: true, max_per_mission: 10 }
+
+# Mode actif (overridable via LARUCHE_MODE env)
+active_mode: "${LARUCHE_MODE:-balanced}"
