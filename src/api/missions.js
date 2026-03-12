@@ -185,12 +185,25 @@ export function createMissionsRoutes(app, deps) {
       roles = await autoDetectRoles();
     } catch {}
 
-    const agents = Object.entries(roles).map(([role, model]) => ({
-      role,
-      model,
-      status: model ? "active" : "unavailable",
+    const AGENT_META = {
+      strategist:  { name: "Stratège",      icon: "🧠", color: "#6366f1" },
+      architect:   { name: "Architecte",    icon: "⚡", color: "#3b82f6" },
+      worker:      { name: "Ouvrière",      icon: "🔧", color: "#f59e0b" },
+      vision:      { name: "Vision",        icon: "👁",  color: "#10b981" },
+      visionFast:  { name: "Vision Rapide", icon: "📷", color: "#06b6d4" },
+      synthesizer: { name: "Synthèse",      icon: "✨", color: "#8b5cf6" },
+    };
+    const recent = loadMissions().slice(0, 1);
+    const lastTask = recent[0]?.command?.substring(0, 50) || "En attente...";
+    const isRunning = activeMissions.size > 0;
+    const agents = Object.entries(AGENT_META).map(([id, meta]) => ({
+      id,
+      ...meta,
+      model: roles[id] || null,
+      status: roles[id] ? (isRunning ? "running" : "idle") : "unavailable",
+      tokensPerSec: 0,
+      lastTask,
     }));
-
     return c.json({ agents });
   });
 

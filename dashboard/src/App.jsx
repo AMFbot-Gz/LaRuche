@@ -229,6 +229,7 @@ export default function App() {
   const [wsEvents,        setWsEvents]        = useState([]);
   const [logs,            setLogs]            = useState([]);
   const [sidebarView,     setSidebarView]     = useState("missions");
+  const [suggestedCommand, setSuggestedCommand] = useState("");
 
   // ─── Chargement des données ─────────────────────────────────────────────────
   const loadMissions = useCallback(async () => {
@@ -321,6 +322,7 @@ export default function App() {
           activeMissionId={activeMissionId}
           wsEvents={wsEvents}
           onRefresh={loadMissions}
+          onSuggest={setSuggestedCommand}
         />
 
         {/* Composer */}
@@ -328,6 +330,8 @@ export default function App() {
           status={status}
           onMissionStart={handleMissionStart}
           onMissionComplete={handleMissionComplete}
+          prefillCommand={suggestedCommand}
+          onPrefillConsumed={() => setSuggestedCommand("")}
         />
       </main>
 

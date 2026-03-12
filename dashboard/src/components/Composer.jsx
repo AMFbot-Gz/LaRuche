@@ -29,7 +29,7 @@ const StopIcon = () => (
 );
 
 // ─── Composer ─────────────────────────────────────────────────────────────────
-export default function Composer({ onMissionStart, onMissionComplete, status }) {
+export default function Composer({ onMissionStart, onMissionComplete, status, prefillCommand, onPrefillConsumed }) {
   const [command, setCommand] = useState("");
   const [loading, setLoading]  = useState(false);
   const [error, setError]      = useState(null);
@@ -40,6 +40,16 @@ export default function Composer({ onMissionStart, onMissionComplete, status }) 
 
   const models = status?.models || {};
   const workerModel = models.worker || "llama3.2:3b";
+
+  // Prefill depuis suggestion EmptyState
+  useEffect(() => {
+    if (prefillCommand) {
+      setCommand(prefillCommand);
+      textareaRef.current?.focus();
+      onPrefillConsumed?.();
+      setTimeout(resize, 0);
+    }
+  }, [prefillCommand]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-resize
   const resize = useCallback(() => {

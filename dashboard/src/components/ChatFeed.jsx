@@ -212,7 +212,7 @@ function MissionThread({ mission }) {
 }
 
 // ─── État vide ────────────────────────────────────────────────────────────────
-function EmptyState() {
+function EmptyState({ onSuggest }) {
   const suggestions = [
     "Analyse l'architecture de ce projet et propose des améliorations",
     "Liste les 5 fichiers les plus gros et explique leur rôle",
@@ -257,6 +257,7 @@ function EmptyState() {
               e.currentTarget.style.color = "var(--text-2)";
               e.currentTarget.style.borderColor = "var(--border-2)";
             }}
+            onClick={() => onSuggest?.(s)}
           >
             {s}
           </button>
@@ -267,7 +268,7 @@ function EmptyState() {
 }
 
 // ─── ChatFeed principal ───────────────────────────────────────────────────────
-export default function ChatFeed({ missions, activeMissionId, wsEvents, onRefresh }) {
+export default function ChatFeed({ missions, activeMissionId, wsEvents, onRefresh, onSuggest }) {
   const [activeMission, setActiveMission] = useState(null);
   const bottomRef = useRef(null);
   const pollRef   = useRef(null);
@@ -332,7 +333,7 @@ export default function ChatFeed({ missions, activeMissionId, wsEvents, onRefres
       flexDirection: "column",
     }}>
       {isEmpty ? (
-        <EmptyState />
+        <EmptyState onSuggest={onSuggest} />
       ) : (
         <div style={{
           maxWidth: 760,
