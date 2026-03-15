@@ -1,0 +1,26 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "globalDependencies": ["**/.env.*local", "**/tsconfig.json"],
+  "globalPassThroughEnv": [
+    "NODE_ENV", "OLLAMA_HOST", "ANTHROPIC_API_KEY",
+    "CHIMERA_SECRET", "TELEGRAM_BOT_TOKEN", "CI"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**"],
+      "cache": true
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
+    "lint": { "outputs": [] },
+    "type-check": { "dependsOn": ["^build"] },
+    "clean": { "cache": false }
+  }
+}

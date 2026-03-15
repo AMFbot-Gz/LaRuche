@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist/
+build/
+coverage/
+.turbo/
+__pycache__/
+*.pyc
+.venv/
+.env
+*.log
+logs/
+.DS_Store
+*.sqlite
+*.db
+agents/memory/data/
+skills/generated/

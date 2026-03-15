@@ -1,0 +1,113 @@
+{
+  "chimera": {
+    "version": "1.0.0",
+    "environment": "development",
+
+    "queen": {
+      "name": "Chimera-Queen",
+      "port": 3000,
+      "hud_port": 9001,
+      "standalone_mode": true,
+      "hitl_timeout_seconds": 120,
+      "max_parallel_tasks": 5,
+      "butterfly_loop_interval_seconds": 30
+    },
+
+    "agents": {
+      "orchestration": { "port": 8001, "enabled": true },
+      "perception":    { "port": 8002, "enabled": true, "screenshot_interval": 30 },
+      "brain":         { "port": 8003, "enabled": true, "max_context_tokens": 8000 },
+      "executor":      { "port": 8004, "enabled": true, "timeout_seconds": 60, "instances": 2 },
+      "evolution":     { "port": 8005, "enabled": true, "interval_hours": 3, "max_proposals": 3 },
+      "memory":        { "port": 8006, "enabled": true, "max_episodes": 1000 },
+      "mcp_bridge":    { "port": 8007, "enabled": true, "timeout_seconds": 30 }
+    },
+
+    "llm": {
+      "routing_mode": "auto",
+      "local_first": true,
+      "providers": {
+        "ollama": {
+          "base_url": "http://localhost:11434",
+          "models": {
+            "default":  "llama3.2:3b",
+            "reasoning":"llama3",
+            "code":     "qwen3-coder",
+            "vision":   "llava",
+            "complex":  "llama3.2"
+          }
+        },
+        "anthropic": {
+          "enabled": true,
+          "model": "claude-sonnet-4-6",
+          "use_case": "critical",
+          "max_tokens": 2048
+        }
+      },
+      "circuit_breaker": { "max_failures": 3, "reset_after_seconds": 60 }
+    },
+
+    "memory": {
+      "backend": "chromadb",
+      "path": "./agents/memory/data/vector_store",
+      "embedding_model": "BAAI/bge-small-en-v1.5",
+      "collections": {
+        "episodes":    { "max": 1000 },
+        "skills":      { "max": 500 },
+        "user_context":{ "max": 50 }
+      },
+      "fallback": "text_search"
+    },
+
+    "skills": {
+      "paths": ["skills/core", "skills/community", "skills/generated"],
+      "auto_generation": {
+        "enabled": true,
+        "model_primary": "qwen3-coder",
+        "model_fallback": "claude-sonnet-4-6",
+        "max_retries": 3,
+        "sandbox_timeout_seconds": 15
+      }
+    },
+
+    "mcp_servers": [
+      "os-control", "terminal", "vision", "vault",
+      "rollback", "skill-factory", "janitor", "pencil", "browser"
+    ],
+
+    "gateway": {
+      "telegram": { "enabled": false, "hitl_mode": "manual_approval" },
+      "rest_api":  { "enabled": true, "port": 3000, "auth": "bearer_token" },
+      "multi_channel": {
+        "enabled": false,
+        "port": 8100,
+        "channels": ["telegram", "discord", "slack", "whatsapp"]
+      }
+    },
+
+    "security": {
+      "sandbox": "subprocess_timeout",
+      "max_shell_timeout_seconds": 30,
+      "blocked_shell_patterns": ["rm -rf /", ":(){ :|:& };:", "mkfs", "shutdown", "reboot"],
+      "require_hmac_mutations": true,
+      "log_all_mutations": true
+    },
+
+    "consciousness": {
+      "enabled": false,
+      "mode": "ultimate",
+      "heartbeat_interval_seconds": 30,
+      "auto_deployment": true
+    },
+
+    "monitoring": {
+      "health_check_interval_seconds": 60,
+      "metrics_retention_days": 30,
+      "thresholds": {
+        "memory_percent": 85,
+        "cpu_percent": 80,
+        "disk_percent": 90
+      }
+    }
+  }
+}

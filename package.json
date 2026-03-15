@@ -1,0 +1,28 @@
+{
+  "name": "project-chimera",
+  "version": "1.0.0",
+  "description": "Distributed Cognitive OS — SaaS",
+  "private": true,
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test && make test-python",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "clean": "turbo run clean && find . -name '__pycache__' -exec rm -rf {} + 2>/dev/null; true",
+    "queen:start": "cd apps/queen && node src/queen_oss.js",
+    "agents:start": "make agents-up",
+    "docker:up": "docker compose -f infra/docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker/docker-compose.yml down",
+    "migrate": "bash infra/scripts/migrate.sh"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
