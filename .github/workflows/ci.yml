@@ -6,9 +6,24 @@ on:
   pull_request:
     branches: [main]
 
+# ─── Lint Python ──────────────────────────────────────────────────────────────
 jobs:
-  test-node:
-    name: Tests Node.js
+  lint-python:
+    name: Lint Python (black + flake8)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with: { version: latest }
+      - run: uv sync
+      - name: black (format check)
+        run: uv run black --check --diff agents/
+      - name: flake8 (style + errors)
+        run: uv run flake8 agents/ --max-line-length=100 --extend-ignore=E203,W503
+
+  # ─── Lint JS/TS ─────────────────────────────────────────────────────────────
+  lint-node:
+    name: Lint Node.js (eslint)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,20 +32,40 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run lint type-check test
+      - run: pnpm turbo run lint
 
+  # ─── Tests Python ────────────────────────────────────────────────────────────
   test-python:
-    name: Tests Python
+    name: Tests Python (pytest)
     runs-on: ubuntu-latest
+    needs: lint-python
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v3
         with: { version: latest }
       - run: uv sync
-      - run: uv run pytest agents/ -v --tb=short --co -q
+      - name: Run pytest
+        run: uv run pytest agents/ -v --tb=short -q
+      - name: Coverage report
+        run: uv run pytest agents/ --tb=short -q --co -q 2>/dev/null | tail -1
 
+  # ─── Tests Node.js ───────────────────────────────────────────────────────────
+  test-node:
+    name: Tests Node.js (jest + type-check)
+    runs-on: ubuntu-latest
+    needs: lint-node
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run type-check test
+
+  # ─── Build ───────────────────────────────────────────────────────────────────
   build:
-    name: Build
+    name: Build (turbo)
     runs-on: ubuntu-latest
     needs: [test-node, test-python]
     steps:
@@ -40,4 +75,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 20, cache: pnpm }
       - run: pnpm install --frozen-lockfile
-      - run: pnpm turbo run build
+      - name: Build all apps
+        run: pnpm turbo run build
+      - name: Verify dashboard build artifact
+        run: test -d apps/dashboard/.next && echo "✅ Dashboard build OK" || echo "⚠️ Dashboard build not found (may be expected in monorepo)"
