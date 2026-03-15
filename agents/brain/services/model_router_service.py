@@ -83,6 +83,37 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "speed":          "medium",
         "cost":           0,
     },
+    # ── Modèles recommandés 2026 (open source SOTA) ───────────────────────────
+    "qwen2.5-coder:32b": {
+        "ollama_name":    "qwen2.5-coder:32b",
+        "strengths":      ["code expert", "refactoring", "multi-langage", "architecture",
+                           "debug complexe", "génération tests", "skill generation"],
+        "max_complexity": "complex",
+        "speed":          "medium",
+        "cost":           0,
+    },
+    "qwen2.5-coder:7b": {
+        "ollama_name":    "qwen2.5-coder:7b",
+        "strengths":      ["code rapide", "scripts", "debug simple", "autocomplete"],
+        "max_complexity": "medium",
+        "speed":          "fast",
+        "cost":           0,
+    },
+    "deepseek-r1:14b": {
+        "ollama_name":    "deepseek-r1:14b",
+        "strengths":      ["raisonnement profond", "chain-of-thought", "mathématiques",
+                           "planification multi-étapes", "auto-critique"],
+        "max_complexity": "complex",
+        "speed":          "slow",
+        "cost":           0,
+    },
+    "deepseek-r1:7b": {
+        "ollama_name":    "deepseek-r1:7b",
+        "strengths":      ["raisonnement", "chain-of-thought", "analyse"],
+        "max_complexity": "medium",
+        "speed":          "medium",
+        "cost":           0,
+    },
     # ── Claude API ────────────────────────────────────────────────────────────
     "claude": {
         "api":            "anthropic",
@@ -349,16 +380,26 @@ class ModelRouterService:
         profile.routing_reason = reason
         return model
 
+    def _best_coder(self, fallback: str) -> tuple[str, str]:
+        """Retourne le meilleur modèle de code disponible (ordre de préférence 2026)."""
+        for m in ("qwen2.5-coder:32b", "qwen2.5-coder:7b", "qwen3-coder"):
+            if self._has(m): return m, f"code → {m}"
+        return fallback, f"code fallback → {fallback}"
+
+    def _best_reasoner(self, fallback: str) -> tuple[str, str]:
+        """Retourne le meilleur modèle de raisonnement disponible."""
+        for m in ("deepseek-r1:14b", "deepseek-r1:7b", "llama3.2"):
+            if self._has(m): return m, f"reasoning → {m}"
+        return fallback, f"reasoning fallback → {fallback}"
+
     def _select_local(self, profile: TaskProfile, fallback: str) -> tuple[str, str]:
         if profile.requires_vision:
             m = "llava" if self._has("llava") else fallback
             return m, "local: vision → llava"
         if profile.requires_code:
-            m = "qwen3-coder" if self._has("qwen3-coder") else fallback
-            return m, "local: code → qwen3-coder"
+            return self._best_coder(fallback)
         if profile.complexity == "complex":
-            m = "llama3.2" if self._has("llama3.2") else fallback
-            return m, "local: complex → llama3.2"
+            return self._best_reasoner(fallback)
         m = "llama3.2:3b" if self._has("llama3.2:3b") else fallback
         return m, "local: simple → llama3.2:3b"
 
@@ -382,20 +423,17 @@ class ModelRouterService:
             return m, "auto: complexe+vision → llama3.2-vision"
 
         if c == "complex" and profile.requires_code:
-            m = "qwen3-coder" if self._has("qwen3-coder") else fallback
-            return m, "auto: complexe+code → qwen3-coder"
+            return self._best_coder(fallback)
 
         if c == "complex":
-            m = "llama3.2" if self._has("llama3.2") else fallback
-            return m, "auto: complexe → llama3.2"
+            return self._best_reasoner(fallback)
 
         if profile.requires_vision:
             m = "llava" if self._has("llava") else "moondream" if self._has("moondream") else fallback
             return m, "auto: vision → llava"
 
         if profile.requires_code:
-            m = "qwen3-coder" if self._has("qwen3-coder") else "llama3.2:3b" if self._has("llama3.2:3b") else fallback
-            return m, "auto: code → qwen3-coder"
+            return self._best_coder(fallback)
 
         m = "llama3.2:3b" if self._has("llama3.2:3b") else fallback
         return m, f"auto: {c} → llama3.2:3b"
