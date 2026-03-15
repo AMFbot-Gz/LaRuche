@@ -1,0 +1,12 @@
+{
+  "name": "AMFbot-Gz/LaRuche",
+  "description": "🧠 Chimera OS — Système agentique cognitif unifié | Monorepo Turborepo | Queen Node.js + 7 agents Python | Auto-Coder Bee | Dashboard Next.js | 100% local Ollama",
+  "accepts": [
+    {
+      "network": "eip155:8453",
+      "asset": "USDC",
+      "address": "YOUR_WALLET_ADDRESS"
+    }
+  ],
+  "resources": []
+}
