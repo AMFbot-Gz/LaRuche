@@ -160,7 +160,9 @@ def test_scan_tools_have_path(svc: MapperService) -> None:
 
 def test_build_world_model_structure(svc: MapperService, tmp_project: Path) -> None:
     """build_world_model returns a valid WorldModel with correct counts."""
-    with patch.object(svc, "_send_to_memory"):
+    # Mock _get_tool_version to avoid spawning subprocesses for every $PATH binary
+    with patch.object(svc, "_send_to_memory"), \
+         patch.object(svc, "_get_tool_version", return_value=""):
         model = svc.build_world_model(directories=[str(tmp_project)])
 
     assert isinstance(model, WorldModel)
@@ -173,7 +175,8 @@ def test_build_world_model_structure(svc: MapperService, tmp_project: Path) -> N
 
 def test_build_world_model_caches_last(svc: MapperService, tmp_project: Path) -> None:
     """get_last_model returns the most recent WorldModel."""
-    with patch.object(svc, "_send_to_memory"):
+    with patch.object(svc, "_send_to_memory"), \
+         patch.object(svc, "_get_tool_version", return_value=""):
         model = svc.build_world_model(directories=[str(tmp_project)])
 
     assert svc.get_last_model() is model
@@ -181,7 +184,8 @@ def test_build_world_model_caches_last(svc: MapperService, tmp_project: Path) ->
 
 def test_build_world_model_memory_called(svc: MapperService, tmp_project: Path) -> None:
     """_send_to_memory is called after a full scan."""
-    with patch.object(svc, "_send_to_memory") as mock_send:
+    with patch.object(svc, "_send_to_memory") as mock_send, \
+         patch.object(svc, "_get_tool_version", return_value=""):
         svc.build_world_model(directories=[str(tmp_project)])
 
     mock_send.assert_called_once()
