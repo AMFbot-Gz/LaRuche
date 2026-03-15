@@ -1,17 +1,42 @@
-.PHONY: install dev build test test-python docker-up docker-down agents-up agents-down migrate clean help
+# Load .env if it exists
+-include .env
+export
+
+.PHONY: install install-ollama dev queen dashboard \
+        agents-up agents-down agents-status logs \
+        build build-queen build-dashboard \
+        test test-python test-queen test-watch \
+        docker-up docker-down docker-logs docker-reset \
+        migrate clean lint type-check status help
 
 # ── Variables ───────────────────────────────────────────────────────────────
 PYTHON := python3
 UV     := uv
 PNPM   := pnpm
 
+AGENT_LOG_DIR := /tmp/chimera_agents_logs
+AGENT_PID_FILE := /tmp/chimera_agents.pids
+
 # ── Setup ───────────────────────────────────────────────────────────────────
 
-install: ## Installe toutes les dépendances (Node.js + Python)
+install: ## Installe toutes les dépendances (Node.js + Python + tesseract)
 	@echo "📦 Installation Node.js (pnpm)..."
 	$(PNPM) install
 	@echo "🐍 Installation Python (uv)..."
 	$(UV) sync
+	@echo "🔍 Vérification de tesseract..."
+	@if ! command -v tesseract >/dev/null 2>&1; then \
+		echo "⚠️  tesseract non trouvé — installation..."; \
+		if [ "$$(uname)" = "Darwin" ]; then \
+			brew install tesseract; \
+		elif command -v apt-get >/dev/null 2>&1; then \
+			sudo apt-get install -y tesseract-ocr; \
+		else \
+			echo "❌ Installez tesseract manuellement : https://github.com/tesseract-ocr/tesseract"; \
+		fi \
+	else \
+		echo "✅ tesseract déjà installé : $$(tesseract --version 2>&1 | head -1)"; \
+	fi
 	@echo "✅ Dépendances installées"
 
 install-ollama: ## Installe Ollama + modèles requis
@@ -29,7 +54,7 @@ dev: ## Lance tout en mode développement (Node.js + Python agents)
 	@echo "🚀 Démarrage Chimera en mode DEV..."
 	$(PNPM) turbo run dev --parallel &
 	$(MAKE) agents-up
-	@echo "✅ Chimera running — Queen :3000 · Dashboard :3001 · Agents :8001-8007"
+	@echo "✅ Chimera running — Queen :3000 · Dashboard :3001 · Agents :8001-8009"
 
 queen: ## Lance seulement la Queen Node.js
 	cd apps/queen && node src/queen_oss.js
@@ -37,17 +62,112 @@ queen: ## Lance seulement la Queen Node.js
 dashboard: ## Lance seulement le dashboard
 	cd apps/dashboard && $(PNPM) dev
 
-agents-up: ## Lance les 7 agents Python
+agents-up: ## Lance les 9 agents Python (avec PIDs dans /tmp/chimera_agents.pids)
 	@echo "🐝 Démarrage des agents Python..."
-	@for agent in orchestration perception brain executor evolution memory mcp-bridge; do \
-		cd agents/$$agent && $(UV) run uvicorn main:app --port $$(grep $$agent ../../../ruche_config.json | grep port | head -1 | grep -o '[0-9]*') --reload & \
-		cd ../../..; \
-	done
-	@echo "✅ Agents Python :8001-:8007 démarrés"
+	@mkdir -p $(AGENT_LOG_DIR)
+	@rm -f $(AGENT_PID_FILE)
+	@touch $(AGENT_PID_FILE)
+	@PORT=$${AGENT_ORCHESTRATION_PORT:-8001}; \
+		$(UV) run uvicorn agents.orchestration.orchestration_agent:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/orchestration.log 2>&1 & \
+		echo "$$! orchestration" >> $(AGENT_PID_FILE); \
+		echo "  ✓ orchestration   :$$PORT (PID $$!)"
+	@PORT=$${AGENT_PERCEPTION_PORT:-8002}; \
+		$(UV) run uvicorn agents.perception.perception_agent:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/perception.log 2>&1 & \
+		echo "$$! perception" >> $(AGENT_PID_FILE); \
+		echo "  ✓ perception      :$$PORT (PID $$!)"
+	@PORT=$${AGENT_BRAIN_PORT:-8003}; \
+		$(UV) run uvicorn agents.brain.brain:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/brain.log 2>&1 & \
+		echo "$$! brain" >> $(AGENT_PID_FILE); \
+		echo "  ✓ brain           :$$PORT (PID $$!)"
+	@PORT=$${AGENT_EXECUTOR_PORT:-8004}; \
+		$(UV) run uvicorn agents.executor.executor_agent:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/executor.log 2>&1 & \
+		echo "$$! executor" >> $(AGENT_PID_FILE); \
+		echo "  ✓ executor        :$$PORT (PID $$!)"
+	@PORT=$${AGENT_EVOLUTION_PORT:-8005}; \
+		$(UV) run uvicorn agents.evolution.auto_coder_bee:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/evolution.log 2>&1 & \
+		echo "$$! evolution" >> $(AGENT_PID_FILE); \
+		echo "  ✓ evolution       :$$PORT (PID $$!)"
+	@PORT=$${AGENT_MEMORY_PORT:-8006}; \
+		$(UV) run uvicorn agents.memory.memory_agent:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/memory.log 2>&1 & \
+		echo "$$! memory" >> $(AGENT_PID_FILE); \
+		echo "  ✓ memory          :$$PORT (PID $$!)"
+	@PORT=$${AGENT_MCP_BRIDGE_PORT:-8007}; \
+		(cd agents/mcp-bridge && $(UV) run uvicorn mcp_bridge_agent:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/mcp-bridge.log 2>&1) & \
+		echo "$$! mcp-bridge" >> $(AGENT_PID_FILE); \
+		echo "  ✓ mcp-bridge      :$$PORT (PID $$!)"
+	@PORT=$${AGENT_DISCOVERY_PORT:-8008}; \
+		$(UV) run uvicorn agents.discovery.mapper_agent:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/discovery.log 2>&1 & \
+		echo "$$! discovery" >> $(AGENT_PID_FILE); \
+		echo "  ✓ discovery       :$$PORT (PID $$!)"
+	@PORT=$${AGENT_KNOWLEDGE_PORT:-8009}; \
+		$(UV) run uvicorn agents.knowledge.librarian_agent:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/knowledge.log 2>&1 & \
+		echo "$$! knowledge" >> $(AGENT_PID_FILE); \
+		echo "  ✓ knowledge       :$$PORT (PID $$!)"
+	@echo "✅ 9 agents Python démarrés — PIDs dans $(AGENT_PID_FILE)"
+	@echo "   Logs : $(AGENT_LOG_DIR)/"
 
-agents-down: ## Arrête tous les agents Python
-	@pkill -f "uvicorn main:app" 2>/dev/null || true
-	@echo "✅ Agents Python arrêtés"
+agents-down: ## Arrête tous les agents Python (via PID file)
+	@if [ -f $(AGENT_PID_FILE) ]; then \
+		echo "🛑 Arrêt des agents Python..."; \
+		while IFS=' ' read -r pid name; do \
+			if [ -n "$$pid" ] && kill -0 "$$pid" 2>/dev/null; then \
+				kill "$$pid" && echo "  ✓ $$name (PID $$pid) arrêté"; \
+			else \
+				echo "  - $$name (PID $$pid) déjà arrêté"; \
+			fi; \
+		done < $(AGENT_PID_FILE); \
+		rm -f $(AGENT_PID_FILE); \
+		echo "✅ Agents Python arrêtés"; \
+	else \
+		echo "ℹ️  Aucun PID file trouvé ($(AGENT_PID_FILE)) — agents peut-être déjà arrêtés"; \
+	fi
+
+agents-status: ## Vérifie l'état de santé de chaque agent Python
+	@echo "=== État des agents Chimera ==="
+	@check_agent() { \
+		name=$$1; port=$$2; \
+		result=$$(curl -s --max-time 2 http://localhost:$$port/health 2>/dev/null); \
+		if [ -n "$$result" ]; then \
+			echo "  ✅ $$name    :$$port — UP"; \
+		else \
+			echo "  ❌ $$name    :$$port — DOWN"; \
+		fi; \
+	}; \
+	check_agent orchestration $${AGENT_ORCHESTRATION_PORT:-8001}; \
+	check_agent perception    $${AGENT_PERCEPTION_PORT:-8002}; \
+	check_agent brain         $${AGENT_BRAIN_PORT:-8003}; \
+	check_agent executor      $${AGENT_EXECUTOR_PORT:-8004}; \
+	check_agent evolution     $${AGENT_EVOLUTION_PORT:-8005}; \
+	check_agent memory        $${AGENT_MEMORY_PORT:-8006}; \
+	check_agent mcp-bridge    $${AGENT_MCP_BRIDGE_PORT:-8007}; \
+	check_agent discovery     $${AGENT_DISCOVERY_PORT:-8008}; \
+	check_agent knowledge     $${AGENT_KNOWLEDGE_PORT:-8009}
+
+logs: ## Affiche les logs de tous les agents (tail -f)
+	@echo "📋 Logs des agents Python ($(AGENT_LOG_DIR)/) — Ctrl+C pour quitter"
+	@if ls $(AGENT_LOG_DIR)/*.log >/dev/null 2>&1; then \
+		tail -f $(AGENT_LOG_DIR)/*.log; \
+	else \
+		echo "❌ Aucun log trouvé dans $(AGENT_LOG_DIR)/ — agents démarrés ?"; \
+	fi
 
 # ── Build ────────────────────────────────────────────────────────────────────
 
@@ -68,7 +188,7 @@ test: ## Lance tous les tests (Node.js + Python)
 
 test-python: ## Lance les tests Python uniquement
 	@echo "🧪 Tests Python..."
-	$(UV) run pytest agents/ -v --tb=short
+	$(UV) run pytest agents/ apps/ -v --tb=short
 
 test-queen: ## Tests Node.js de la Queen
 	cd apps/queen && $(PNPM) test
@@ -119,10 +239,8 @@ type-check: ## Vérifie les types TypeScript
 
 status: ## Affiche l'état de tous les services
 	@echo "=== Chimera Status ==="
-	@curl -s http://localhost:3000/api/health 2>/dev/null && echo "✅ Queen :3000" || echo "❌ Queen :3000"
-	@for port in 8001 8002 8003 8004 8005 8006 8007; do \
-		curl -s http://localhost:$$port/health 2>/dev/null && echo "✅ Agent :$$port" || echo "❌ Agent :$$port"; \
-	done
+	@curl -s --max-time 2 http://localhost:3000/api/health 2>/dev/null && echo "✅ Queen :3000" || echo "❌ Queen :3000"
+	$(MAKE) agents-status
 
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'

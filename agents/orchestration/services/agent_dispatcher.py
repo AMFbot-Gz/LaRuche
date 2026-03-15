@@ -25,11 +25,15 @@ class AgentDispatcher:
 
     # URLs configurables via variables d'environnement
     AGENT_URLS: dict[str, str] = {
-        "brain":      os.getenv("AGENT_BRAIN_URL",      "http://localhost:8003"),
-        "executor":   os.getenv("AGENT_EXECUTOR_URL",   "http://localhost:8004"),
-        "memory":     os.getenv("AGENT_MEMORY_URL",     "http://localhost:8006"),
-        "perception": os.getenv("AGENT_PERCEPTION_URL", "http://localhost:8002"),
-        "evolution":  os.getenv("AGENT_EVOLUTION_URL",  "http://localhost:8005"),
+        "orchestration": os.getenv("AGENT_ORCHESTRATION_URL", "http://localhost:8001"),
+        "perception":    os.getenv("AGENT_PERCEPTION_URL",    "http://localhost:8002"),
+        "brain":         os.getenv("AGENT_BRAIN_URL",         "http://localhost:8003"),
+        "executor":      os.getenv("AGENT_EXECUTOR_URL",      "http://localhost:8004"),
+        "evolution":     os.getenv("AGENT_EVOLUTION_URL",     "http://localhost:8005"),
+        "memory":        os.getenv("AGENT_MEMORY_URL",        "http://localhost:8006"),
+        "mcp-bridge":    os.getenv("AGENT_MCP_BRIDGE_URL",    "http://localhost:8007"),
+        "discovery":     os.getenv("AGENT_DISCOVERY_URL",     "http://localhost:8008"),
+        "knowledge":     os.getenv("AGENT_KNOWLEDGE_URL",     "http://localhost:8009"),
     }
 
     async def dispatch(

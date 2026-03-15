@@ -19,6 +19,7 @@ Launch:
 
 from __future__ import annotations
 
+import os
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
@@ -65,9 +66,10 @@ async def status() -> MapperStatus:
     model = _mapper.get_last_model()
 
     # Quick reachability check for Memory Agent
+    _memory_url = os.getenv("AGENT_MEMORY_URL", "http://localhost:8006")
     try:
         r = req_lib.get(
-            "http://localhost:8006/health",
+            f"{_memory_url}/health",
             timeout=1.0,
         )
         memory_ok = r.status_code == 200

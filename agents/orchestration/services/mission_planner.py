@@ -8,6 +8,7 @@ Si le Brain est indisponible, un plan de fallback basique est retourné.
 from __future__ import annotations
 
 import json
+import os
 import re
 import uuid
 from typing import Any
@@ -56,8 +57,8 @@ class MissionPlanner:
     Fallback : plan basique si le Brain est indisponible.
     """
 
-    def __init__(self, brain_url: str = "http://localhost:8003") -> None:
-        self._brain_url = brain_url
+    def __init__(self, brain_url: str | None = None) -> None:
+        self._brain_url = brain_url or os.getenv("AGENT_BRAIN_URL", "http://localhost:8003")
 
     async def plan(self, objective: str, context: str = "") -> list[MissionStep]:
         """
