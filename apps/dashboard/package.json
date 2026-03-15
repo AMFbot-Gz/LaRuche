@@ -21,7 +21,8 @@
         "framer-motion": "^10.16.0",
         "clsx": "^2.0.0",
         "tailwind-merge": "^2.0.0",
-        "date-fns": "^2.30.0"
+        "date-fns": "^2.30.0",
+        "zustand": "^4.5.0"
     },
     "devDependencies": {
         "@types/node": "^22.0.0",

@@ -28,6 +28,7 @@ import { subagentManager } from "./subagents/index.js";
 import eventBus from '../core/events/event_bus.js';
 import { DistributedHealthMonitor } from '../core/monitoring/distributed_health.js';
 import MultilevelCache from '../core/cache/multilevel_cache.js';
+import { startDashboardWSServer, broadcastDashboard } from './services/websocket_server.js';
 
 dotenv.config();
 
@@ -215,6 +216,9 @@ let _hudBatch = [];
 let _hudFlushTimer = null;
 
 export function broadcastHUD(event) {
+  // Miroir vers le dashboard Next.js (port 9002)
+  broadcastDashboard(event);
+
   _hudBatch.push({ ...event, ts: Date.now() });
   if (!_hudFlushTimer) {
     _hudFlushTimer = setTimeout(() => {
@@ -624,6 +628,9 @@ setInterval(() => cleanupOldScreenshots(SCREENSHOTS_DIR), 60 * 60 * 1000).unref(
 // Démarrage du serveur HUD WebSocket (après validation config, avec gestion EADDRINUSE)
 wss = startHUDServer();
 logger.info(`📡 HUD WebSocket en écoute sur port ${CONFIG.HUD_PORT}`);
+
+// Démarrage du serveur WebSocket Dashboard Next.js (port 9002)
+startDashboardWSServer({ runMission });
 
 // Démarrage du health monitor distribué (7 couches Python)
 const healthMonitor = new DistributedHealthMonitor(eventBus);
