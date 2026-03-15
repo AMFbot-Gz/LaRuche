@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "name": "chimera-dashboard",
+  "comment": "Déploie uniquement apps/dashboard (Next.js). Queen + agents → Railway.",
+
+  "buildCommand": "pnpm --filter @saas/closer-web build",
+  "outputDirectory": "apps/dashboard/.next",
+  "installCommand": "pnpm install",
+  "framework": "nextjs",
+
+  "env": {
+    "NEXT_PUBLIC_QUEEN_URL": "@chimera_queen_url",
+    "NEXT_PUBLIC_DASHBOARD_WS_URL": "@chimera_ws_url"
+  },
+
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin",  "value": "*" },
+        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,DELETE,OPTIONS" },
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,Authorization" }
+      ]
+    }
+  ]
+}
