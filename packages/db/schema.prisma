@@ -1,0 +1,111 @@
+// schema.prisma — Package @chimera/db
+// Base de données principale de Chimera (PostgreSQL)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Plan {
+  FREE
+  PRO
+  TEAMS
+}
+
+enum SessionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SubStatus {
+  ACTIVE
+  CANCELLED
+  PAST_DUE
+}
+
+// ─── Modèles ──────────────────────────────────────────────────────────────────
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  clerkId   String   @unique
+  plan      Plan     @default(FREE)
+  createdAt DateTime @default(now())
+
+  workspaces    Workspace[]
+  subscriptions Subscription[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String   @id @default(cuid())
+  name      String
+  userId    String
+  createdAt DateTime @default(now())
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions AgentSession[]
+  apiKeys  ApiKey[]
+
+  @@index([userId])
+  @@map("workspaces")
+}
+
+model AgentSession {
+  id          String        @id @default(cuid())
+  workspaceId String
+  status      SessionStatus @default(PENDING)
+  goal        String
+  result      String?
+  logs        Json[]        @default([])
+  screenshots String[]      @default([])
+  startedAt   DateTime      @default(now())
+  endedAt     DateTime?
+  tokenUsed   Int           @default(0)
+  cost        Float         @default(0)
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([status])
+  @@map("agent_sessions")
+}
+
+model Subscription {
+  id                String    @id @default(cuid())
+  userId            String
+  stripeCustomerId  String    @unique
+  stripePriceId     String
+  status            SubStatus @default(ACTIVE)
+  currentPeriodEnd  DateTime
+  plan              Plan      @default(FREE)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("subscriptions")
+}
+
+model ApiKey {
+  id          String    @id @default(cuid())
+  workspaceId String
+  key         String    @unique
+  name        String
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("api_keys")
+}

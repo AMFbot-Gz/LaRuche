@@ -31,6 +31,8 @@ import MultilevelCache from '../core/cache/multilevel_cache.js';
 import { startDashboardWSServer, broadcastDashboard } from './services/websocket_server.js';
 import { resilientFireAndForget, SERVICES } from './utils/resilientFetch.js';
 import { isFirstRun, printWelcomeBanner, runFirstRunChecks, markInitialized } from './utils/firstRun.js';
+import { ComputerUseLoop } from './services/computer_use_loop.js';
+import { hitlManager } from './core/hitl_manager.js';
 
 dotenv.config();
 
@@ -654,6 +656,15 @@ startDashboardWSServer({ runMission });
 const healthMonitor = new DistributedHealthMonitor(eventBus);
 healthMonitor.start();
 
+// Instanciation du Computer Use Loop (Perception :8002 + Executor :8004)
+const computerUseLoop = new ComputerUseLoop({ eventBus, hitlManager });
+
+// Broadcast HUD en temps réel à chaque step Computer Use
+computerUseLoop.on('step', (data) => broadcastHUD({ type: 'computer_use.step', ...data }));
+computerUseLoop.on('session.started', (data) => broadcastHUD({ type: 'computer_use.started', ...data }));
+computerUseLoop.on('session.ended', (data) => broadcastHUD({ type: 'computer_use.ended', ...data }));
+computerUseLoop.on('session.error', (data) => broadcastHUD({ type: 'computer_use.error', ...data }));
+
 // Réaction aux couches Python down (alerte après 3 échecs consécutifs)
 eventBus.on('layer.down', ({ name, failures }) => {
   if (failures >= 3) {
@@ -682,7 +693,7 @@ try {
 // ─── MODE STANDALONE ───────────────────────────────────────────────────────────────────────
 if (STANDALONE) {
   logger.info("🌐 Mode Standalone activé — Telegram désactivé");
-  startStandaloneServer({ loadMissions, saveMission, runMission, autoDetectRoles, broadcastHUD, logger, subagentManager, healthMonitor, missionCache: _missionCache, eventBus });
+  startStandaloneServer({ loadMissions, saveMission, runMission, autoDetectRoles, broadcastHUD, logger, subagentManager, healthMonitor, missionCache: _missionCache, eventBus, computerUseLoop });
   const shutdown = () => { logger.info("🛑 Arrêt en cours..."); wss.close(); process.exit(0); };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);

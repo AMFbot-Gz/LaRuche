@@ -13,7 +13,9 @@ import { createMissionsRoutes } from "../api/missions.js";
 import { createMcpRoutes } from "../api/mcp_routes.js";
 import { createMutationsRoutes } from "../api/mutations.js";
 import { registerConfigRoutes } from "../api/config_routes.js";
+import { registerMarketplaceRoutes } from "../api/marketplace.js";
 import { startCoeusLoop } from "../agents/coeus.js";
+import { createComputerUseRoutes } from "../api/computer_use_routes.js";
 
 /**
  * Lance le serveur API standalone
@@ -25,6 +27,7 @@ import { startCoeusLoop } from "../agents/coeus.js";
  *   autoDetectRoles: () => Promise<Object>,
  *   broadcastHUD: (event: Object) => void,
  *   logger: import('winston').Logger,
+ *   computerUseLoop: import('../services/computer_use_loop.js').ComputerUseLoop,
  * }} deps
  * @returns {{ app: Hono, server: import('http').Server }}
  */
@@ -54,6 +57,12 @@ export function startStandaloneServer(deps) {
   createMcpRoutes(app);
   createMutationsRoutes(app);
   registerConfigRoutes(app);
+  registerMarketplaceRoutes(app);
+
+  // ─── Routes Computer Use Loop ────────────────────────────────────────────────
+  if (deps.computerUseLoop) {
+    createComputerUseRoutes(app, { computerUseLoop: deps.computerUseLoop });
+  }
 
   // ─── Route racine ───────────────────────────────────────────────────────────
   app.get("/", (c) =>
@@ -117,6 +126,13 @@ export function startStandaloneServer(deps) {
         "POST /api/mutations/suggested",
         "GET  /api/mutations/stats",
         "POST /api/mutations/audit",
+        "POST /api/computer-use/start",
+        "GET  /api/computer-use/sessions",
+        "DELETE /api/computer-use/sessions/:id",
+        "GET  /api/marketplace/skills",
+        "POST /api/marketplace/skills/:id/install",
+        "POST /api/marketplace/skills/publish",
+        "DELETE /api/marketplace/skills/:id",
       ],
     })
   );

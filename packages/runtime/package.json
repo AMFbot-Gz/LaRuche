@@ -1,0 +1,10 @@
+{
+  "name": "@chimera/runtime",
+  "version": "1.0.0",
+  "description": "Modes de déploiement intelligents Chimera",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "detect": "node src/auto_deployment.js"
+  }
+}

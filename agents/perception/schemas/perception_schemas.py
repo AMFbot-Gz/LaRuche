@@ -9,6 +9,8 @@ from __future__ import annotations
 from typing import Optional
 from pydantic import BaseModel, Field
 
+from agents.perception.services.vision_service import VisionAnalysis
+
 
 # ─── /screenshot ──────────────────────────────────────────────────────────────
 
@@ -164,6 +166,33 @@ class AnalyzeResponse(BaseModel):
     text_preview: str = Field(description="Premiers 200 caractères du texte détecté")
     text_word_count: int
     duration_ms: int
+
+
+# ─── /vision_understand ───────────────────────────────────────────────────────
+
+
+class VisionUnderstandRequest(BaseModel):
+    """Requête d'analyse Claude Vision : screenshot + goal."""
+
+    screenshot_b64: str = Field(
+        ...,
+        description="Screenshot PNG encodé en base64",
+    )
+    goal: str = Field(
+        ...,
+        min_length=1,
+        description="Objectif à atteindre en langage naturel",
+    )
+    history: list[dict] = Field(
+        default_factory=list,
+        description="Historique des actions précédentes (optionnel)",
+    )
+
+
+class VisionUnderstandResponse(BaseModel):
+    """Réponse de l'analyse Claude Vision."""
+
+    analysis: VisionAnalysis
 
 
 # ─── /status ──────────────────────────────────────────────────────────────────

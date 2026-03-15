@@ -1,0 +1,7 @@
+{
+  "name": "@chimera/marketplace",
+  "version": "1.0.0",
+  "description": "Marketplace skills Chimera — search, install, publish",
+  "type": "module",
+  "main": "src/index.js"
+}

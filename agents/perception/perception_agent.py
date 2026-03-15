@@ -6,15 +6,17 @@ Le Perception Agent est les yeux de Chimera. Il :
   2. Extrait le texte via OCR (Tesseract)
   3. Analyse le contenu visuel (couleurs, luminosité, présence de texte)
   4. Permet de chercher un texte spécifique sur l'écran
+  5. Analyse le screenshot via Claude Vision pour recommander la prochaine action (Computer Use)
 
 Endpoints :
-  GET  /health      — liveness check (HealthMonitor Queen)
-  GET  /status      — capacités détaillées (OCR dispo, résolution, moniteurs)
-  POST /screenshot  — capture d'écran → base64 PNG/JPEG
-  POST /ocr         — screenshot + OCR → texte extrait
-  POST /screen_text — alias /ocr simplifié (texte brut uniquement)
-  POST /find_text   — cherche un texte précis sur l'écran
-  POST /analyze     — analyse visuelle rapide (dimensions, couleurs, texte)
+  GET  /health             — liveness check (HealthMonitor Queen)
+  GET  /status             — capacités détaillées (OCR dispo, résolution, moniteurs)
+  POST /screenshot         — capture d'écran → base64 PNG/JPEG
+  POST /ocr                — screenshot + OCR → texte extrait
+  POST /screen_text        — alias /ocr simplifié (texte brut uniquement)
+  POST /find_text          — cherche un texte précis sur l'écran
+  POST /analyze            — analyse visuelle rapide (dimensions, couleurs, texte)
+  POST /vision_understand  — Claude Vision → prochaine action pour atteindre un goal
 
 Lancement :
   uvicorn agents.perception.perception_agent:app --port 8002 --reload
@@ -38,8 +40,10 @@ from agents.perception.schemas.perception_schemas import (
     ScreenshotRequest,
     ScreenshotResponse,
     StatusResponse,
+    VisionUnderstandRequest,
+    VisionUnderstandResponse,
 )
-from agents.perception.services import ocr_service, screenshot_service
+from agents.perception.services import ocr_service, screenshot_service, vision_service
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -309,6 +313,40 @@ async def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
         text_word_count=   word_count,
         duration_ms=       duration_ms,
     )
+
+
+# ─── /vision_understand ───────────────────────────────────────────────────────
+
+
+@app.post("/vision_understand", response_model=VisionUnderstandResponse)
+async def vision_understand(req: VisionUnderstandRequest) -> VisionUnderstandResponse:
+    """
+    Analyse un screenshot via Claude Vision et recommande la prochaine action.
+
+    Utilisé pour le Computer Use : à partir d'un screenshot et d'un objectif,
+    Claude identifie les éléments cliquables et détermine quelle action effectuer.
+
+    - screenshot_b64 : image PNG en base64 (ex: retour de /screenshot)
+    - goal           : objectif en langage naturel ("ouvre Safari")
+    - history        : liste des actions précédentes pour le contexte (optionnel)
+
+    Lève 400 si ANTHROPIC_API_KEY n'est pas configurée.
+    Lève 502 si la réponse de Claude ne peut pas être parsée.
+    """
+    try:
+        analysis = await vision_service.understand_screen(
+            screenshot_b64=req.screenshot_b64,
+            goal=req.goal,
+            history=req.history or [],
+        )
+    except ValueError as exc:
+        # Clé API manquante
+        raise HTTPException(status_code=400, detail=str(exc))
+    except RuntimeError as exc:
+        # Réponse Claude invalide
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    return VisionUnderstandResponse(analysis=analysis)
 
 
 # ─── Utilitaires ──────────────────────────────────────────────────────────────
