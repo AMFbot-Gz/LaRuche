@@ -1,13 +1,19 @@
 """
-services/llm_code_generator.py — Générateur de code via Ollama
+services/llm_code_generator.py — Générateur de code via Brain Agent → Ollama
 
-Prend une CodingTask, construit un prompt précis, appelle Ollama,
-nettoie la réponse et retourne le code Python brut.
+Pipeline d'appel LLM (du plus intelligent au plus simple) :
+  1. Brain Agent (:8003) — routing intelligent, choisit le meilleur modèle
+  2. Direct Ollama      — fallback si Brain indisponible
+
+Cette architecture permet au Brain de choisir qwen3-coder pour le code
+sans que l'évolution agent ait besoin de connaître la liste des modèles.
 """
 
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
 import time
 from typing import TYPE_CHECKING
@@ -16,6 +22,9 @@ import requests
 
 if TYPE_CHECKING:
     from agents.evolution.schemas.coding_task import CodingTask, TaskComplexity
+
+# URL du Brain Agent (configurable via .env)
+_BRAIN_URL = os.getenv("AGENT_BRAIN_URL", "http://localhost:8003")
 
 # Modèles par complexité (local-first)
 MODEL_BY_COMPLEXITY: dict[str, list[str]] = {
@@ -60,12 +69,31 @@ class LLMCodeGenerator:
     # ─── API publique ──────────────────────────────────────────────────────────
 
     def generate(self, task: "CodingTask") -> "GeneratedCode":
-        """Point d'entrée principal. Lève une exception si tous les modèles échouent."""
+        """
+        Point d'entrée principal.
+
+        Essaie d'abord le Brain Agent (routing intelligent).
+        Fallback sur Ollama direct si Brain indisponible.
+        Lève RuntimeError si tous les modèles échouent.
+        """
         from agents.evolution.schemas.coding_task import GeneratedCode
 
-        models = MODEL_BY_COMPLEXITY.get(task.complexity.value, MODEL_BY_COMPLEXITY["medium"])
         prompt = self._build_prompt(task)
 
+        # ── Tentative 1 : Brain Agent (routing intelligent) ──────────────────
+        brain_result = self._call_brain(prompt, task.complexity.value)
+        if brain_result is not None:
+            raw, model_used = brain_result
+            code = self._extract_code(raw)
+            return GeneratedCode(
+                raw_response   = raw,
+                extracted_code = code,
+                model_used     = f"brain→{model_used}",
+                generation_ms  = 0,  # durée incluse dans l'appel brain
+            )
+
+        # ── Tentative 2 : Ollama direct (fallback) ────────────────────────────
+        models = MODEL_BY_COMPLEXITY.get(task.complexity.value, MODEL_BY_COMPLEXITY["medium"])
         last_error: Exception | None = None
         for model in models:
             if not self._model_available(model):
@@ -74,22 +102,20 @@ class LLMCodeGenerator:
                 t0  = time.monotonic()
                 raw = self._call_ollama(model, prompt)
                 ms  = int((time.monotonic() - t0) * 1000)
-
                 code = self._extract_code(raw)
                 return GeneratedCode(
-                    raw_response=raw,
-                    extracted_code=code,
-                    model_used=model,
-                    generation_ms=ms,
+                    raw_response   = raw,
+                    extracted_code = code,
+                    model_used     = model,
+                    generation_ms  = ms,
                 )
             except Exception as exc:
                 last_error = exc
                 continue
 
         raise RuntimeError(
-            f"Aucun modèle disponible pour générer le code. "
-            f"Modèles essayés : {models}. "
-            f"Dernière erreur : {last_error}"
+            f"Aucun modèle disponible (Brain + Ollama direct). "
+            f"Modèles essayés : {models}. Dernière erreur : {last_error}"
         )
 
     # ─── Construction du prompt ────────────────────────────────────────────────
@@ -119,6 +145,36 @@ class LLMCodeGenerator:
             "Génère le code Python maintenant :",
         ]
         return "\n".join(lines)
+
+    # ─── Appel Brain Agent ────────────────────────────────────────────────────
+
+    def _call_brain(self, prompt: str, complexity: str) -> tuple[str, str] | None:
+        """
+        Délègue la génération LLM au Brain Agent (:8003).
+
+        Retourne (raw_response, model_used) si succès, None si Brain indisponible.
+        Toujours graceful : Brain est optionnel.
+        """
+        try:
+            resp = requests.post(
+                f"{_BRAIN_URL}/think",
+                json={
+                    "prompt":        f"{SYSTEM_PROMPT}\n\n{prompt}",
+                    "task_type":     "code",
+                    "routing_mode":  "auto",
+                },
+                timeout=self.timeout,
+            )
+            if resp.status_code == 200:
+                data  = resp.json()
+                raw   = data.get("response", "")
+                model = data.get("model_used", "brain")
+                if raw:
+                    logging.info(f"[evolution] Brain routing → {model}")
+                    return raw, model
+        except Exception as exc:
+            logging.debug(f"[evolution] Brain indisponible, fallback Ollama direct ({exc})")
+        return None
 
     # ─── Appel Ollama ──────────────────────────────────────────────────────────
 

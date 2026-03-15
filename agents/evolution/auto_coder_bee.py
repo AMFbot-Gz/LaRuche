@@ -21,8 +21,14 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+import os
+
+import httpx
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
+
+# URL du Memory Agent (configurable via .env)
+_MEMORY_URL = os.getenv("AGENT_MEMORY_URL", "http://localhost:8006")
 
 from agents.evolution.schemas.coding_task import (
     CodingTask,
@@ -65,7 +71,7 @@ async def health():
 
 
 @app.post("/generate_and_run", response_model=CodingTaskResult)
-async def generate_and_run(task: CodingTask) -> CodingTaskResult:
+async def generate_and_run(task: CodingTask, background_tasks: BackgroundTasks) -> CodingTaskResult:
     """
     Pipeline complet : description → code → sandbox → résultat.
 
@@ -106,7 +112,7 @@ async def generate_and_run(task: CodingTask) -> CodingTaskResult:
     # ── 4. Résultat final ─────────────────────────────────────────────────────
     total_ms = int((time.monotonic() - t_total) * 1000)
 
-    return CodingTaskResult(
+    result = CodingTaskResult(
         task_id=task_id,
         status=execution.status,
         generated=generated,
@@ -115,6 +121,20 @@ async def generate_and_run(task: CodingTask) -> CodingTaskResult:
         skill_path=str(skill_path) if skill_path else None,
         total_ms=total_ms,
     )
+
+    # ── 5. Mémorisation asynchrone (fire-and-forget) ──────────────────────────
+    # Notifie le Memory Agent après chaque exécution pour apprentissage continu.
+    # Non bloquant : la réponse est renvoyée avant la fin de ce background task.
+    background_tasks.add_task(
+        _notify_memory,
+        description=task.description,
+        code=generated.extracted_code,
+        model=generated.model_used,
+        success=(execution.status == ExecutionStatus.SUCCESS),
+        stdout=execution.stdout[:200],
+    )
+
+    return result
 
 
 @app.get("/skills")
@@ -212,6 +232,37 @@ def _save_skill(task: CodingTask, generated: GeneratedCode) -> Path | None:
 
     except Exception:
         return None
+
+
+# ─── Memory notification (background task) ────────────────────────────────────
+
+async def _notify_memory(
+    description: str,
+    code: str,
+    model: str,
+    success: bool,
+    stdout: str,
+) -> None:
+    """
+    Fire-and-forget call to the Memory Agent after each execution.
+
+    Stores the task + result so the Brain can learn from past experiences
+    via get_context_for_task() before generating future code.
+    Always silent on failure (Memory Agent is optional).
+    """
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            await client.post(
+                f"{_MEMORY_URL}/memories",
+                json={
+                    "task":    description,
+                    "result":  {"success": success, "model": model, "output": stdout},
+                    "success": success,
+                    "context": f"model={model}",
+                },
+            )
+    except Exception:
+        pass  # Memory Agent is optional — never block the main pipeline
 
 
 # ─── Lancement direct ─────────────────────────────────────────────────────────

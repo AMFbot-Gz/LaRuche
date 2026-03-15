@@ -1,0 +1,17 @@
+[project]
+name = "chimera-memory"
+version = "1.0.0"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.30",
+  "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+# Install on Linux prod: pip install chimera-memory[ml]
+ml = [
+  "chromadb>=0.5",
+  "fastembed>=0.3",
+  "scikit-learn>=1.4",
+]
