@@ -168,7 +168,7 @@ export default function DemoIntelligencePage() {
                                 <div style={{ flex: 1 }}>
                                     <p style={{ fontSize: 'var(--text-xs)', color: 'rgba(255,255,255,0.8)', fontWeight: 'var(--font-medium)' }}>{f.feature}</p>
                                     <div style={{ height: '3px', background: 'rgba(255,255,255,0.1)', borderRadius: 'var(--radius-full)', marginTop: '4px' }}>
-                                        <div style={{ height: '100%', width: `${f.interest}%`, background: f.interested ? 'var(--color-accent-400)' : 'var(--color-primary-400)', borderRadius: 'var(--radius-full)' }} />
+                                        <div style={{ height: '100%', width: `${f.interest}%`, background: f.engaged ? 'var(--color-accent-400)' : 'var(--color-primary-400)', borderRadius: 'var(--radius-full)' }} />
                                     </div>
                                 </div>
                                 <span style={{ fontSize: '11px', fontWeight: 'var(--font-bold)', color: f.engaged ? 'var(--color-accent-400)' : 'rgba(255,255,255,0.4)' }}>{f.interest}%</span>

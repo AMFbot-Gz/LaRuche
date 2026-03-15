@@ -10,10 +10,10 @@
  */
 
 import React, { useState, FormEvent } from 'react';
-import { useChimeraSocket } from '../../hooks/useChimeraSocket';
-import { useChimeraStore }  from '../../store/chimera';
-import { HitlCard }         from '../../components/HitlCard';
-import { HitlBadge }        from '../../components/HitlBadge';
+import { useChimeraSocket } from '../../../hooks/useChimeraSocket';
+import { useChimeraStore }  from '../../../store/chimera';
+import { HitlCard }         from '../../../components/HitlCard';
+import { HitlBadge }        from '../../../components/HitlBadge';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Widget 1 — HiveStatus

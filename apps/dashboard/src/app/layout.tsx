@@ -4,8 +4,8 @@ import Providers from './providers';
 import '@saas/ui-kit/src/styles/globals.css';
 
 export const metadata: Metadata = {
-    title: 'Revenue OS — Closer Command Center',
-    description: 'AI-powered sales closing assistant with real-time coaching',
+    title: 'Chimera OS — Agentic Intelligence Platform',
+    description: 'Chimera OS — Queen Node.js + 9 agents Python · Computer Use · SaaS',
     icons: {
         icon: '/favicon.ico',
     },
