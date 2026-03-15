@@ -44,3 +44,4 @@ patcheck.tmp
 # Runtime
 .laruche/logs/
 .laruche/.initialized
+.env.auto
