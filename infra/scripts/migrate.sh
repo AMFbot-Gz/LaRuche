@@ -41,17 +41,9 @@ fi
 # ── 2. Agents Python depuis PICO-RUCHE ─────────────────────
 log "Migration agents Python (PICO-RUCHE → agents/)..."
 if [ -d "$PICO/agent" ]; then
-  declare -A AGENT_MAP=(
-    ["queen"]="orchestration"
-    ["perception"]="perception"
-    ["brain"]="brain"
-    ["executor"]="executor"
-    ["evolution"]="evolution"
-    ["memory"]="memory"
-    ["mcp_bridge"]="mcp-bridge"
-  )
-  for src_name in "${!AGENT_MAP[@]}"; do
-    dst_name="${AGENT_MAP[$src_name]}"
+  for pair in "queen:orchestration" "perception:perception" "brain:brain" "executor:executor" "evolution:evolution" "memory:memory" "mcp_bridge:mcp-bridge"; do
+    src_name="${pair%%:*}"
+    dst_name="${pair##*:}"
     src="$PICO/agent/$src_name"
     dst="$CHIMERA_DIR/agents/$dst_name"
     if [ -d "$src" ]; then
