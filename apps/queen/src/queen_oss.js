@@ -25,9 +25,9 @@ import { runIntentPipeline, isComputerUseIntent } from "./agents/intentPipeline.
 import { learn } from "./learning/missionMemory.js";
 import { missionQueue } from "./missionQueue.js";
 import { subagentManager } from "./subagents/index.js";
-import eventBus from '../core/events/event_bus.js';
-import { DistributedHealthMonitor } from '../core/monitoring/distributed_health.js';
-import MultilevelCache from '../core/cache/multilevel_cache.js';
+import eventBus from './core/events/event_bus.js';
+import { DistributedHealthMonitor } from './core/monitoring/distributed_health.js';
+import MultilevelCache from './core/cache/multilevel_cache.js';
 import { startDashboardWSServer, broadcastDashboard } from './services/websocket_server.js';
 import { resilientFireAndForget, SERVICES } from './utils/resilientFetch.js';
 import { isFirstRun, printWelcomeBanner, runFirstRunChecks, markInitialized } from './utils/firstRun.js';

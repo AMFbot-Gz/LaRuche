@@ -14,16 +14,16 @@
         "./src/*"
       ],
       "@saas/ui-kit": [
-        "../../libs/ui-kit/src/index.ts"
+        "../../packages/ui-kit/src/index.ts"
       ],
       "@saas/ui-kit/*": [
-        "../../libs/ui-kit/src/*"
+        "../../packages/ui-kit/src/*"
       ],
       "@saas/common": [
-        "../../libs/common/src/index.ts"
+        "../../packages/common/src/index.ts"
       ],
       "@saas/common/*": [
-        "../../libs/common/src/*"
+        "../../packages/common/src/*"
       ]
     },
     "allowJs": true,
