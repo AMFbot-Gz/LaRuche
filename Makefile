@@ -3,11 +3,12 @@
 export
 
 .PHONY: install install-ollama dev queen dashboard \
-        agents-up agents-down agents-status logs \
+        agents agents-up agents-down agents-status stop-agents logs logs-agents \
         build build-queen build-dashboard \
-        test test-python test-queen test-watch \
+        test test-python test-node test-queen test-watch \
         docker-up docker-down docker-logs docker-reset \
-        migrate clean lint type-check status help
+        migrate db-migrate clean lint type-check status \
+        doctor setup help
 
 # ── Variables ───────────────────────────────────────────────────────────────
 PYTHON := python3
@@ -18,6 +19,27 @@ AGENT_LOG_DIR := /tmp/chimera_agents_logs
 AGENT_PID_FILE := /tmp/chimera_agents.pids
 
 # ── Setup ───────────────────────────────────────────────────────────────────
+
+setup: ## Premier lancement : install + copie .env + doctor
+	@echo "🔧 Chimera setup..."
+	@cp -n .env.example .env 2>/dev/null && echo "  ✓ .env créé depuis .env.example" || echo "  - .env déjà présent"
+	$(MAKE) install
+	$(MAKE) doctor
+	@echo ""
+	@echo "✅ Setup terminé ! Démarrez avec : make dev"
+	@echo "   Queen:     http://localhost:3000"
+	@echo "   Dashboard: http://localhost:3001"
+	@echo "   Agents:    http://localhost:8001-8009"
+
+doctor: ## Vérifie les prérequis (node, pnpm, python3, uv, ollama)
+	@echo "=== Chimera Doctor ==="
+	@node --version >/dev/null 2>&1 && echo "  ✅ node       $$(node --version)" || echo "  ❌ node       NON TROUVÉ (requis : >=20)"
+	@pnpm --version >/dev/null 2>&1 && echo "  ✅ pnpm       $$(pnpm --version)" || echo "  ❌ pnpm       NON TROUVÉ (requis : >=9)"
+	@python3 --version >/dev/null 2>&1 && echo "  ✅ python3    $$(python3 --version)" || echo "  ❌ python3    NON TROUVÉ (requis : >=3.11)"
+	@uv --version >/dev/null 2>&1 && echo "  ✅ uv         $$(uv --version)" || echo "  ❌ uv         NON TROUVÉ — https://docs.astral.sh/uv/"
+	@ollama --version >/dev/null 2>&1 && echo "  ✅ ollama     $$(ollama --version 2>/dev/null | head -1)" || echo "  ⚠️  ollama     NON TROUVÉ (optionnel, requis pour mode local)"
+	@tesseract --version >/dev/null 2>&1 && echo "  ✅ tesseract  $$(tesseract --version 2>&1 | head -1)" || echo "  ⚠️  tesseract  NON TROUVÉ (optionnel, requis pour perception OCR)"
+	@echo "=============================="
 
 install: ## Installe toutes les dépendances (Node.js + Python + tesseract)
 	@echo "📦 Installation Node.js (pnpm)..."
@@ -61,6 +83,8 @@ queen: ## Lance seulement la Queen Node.js
 
 dashboard: ## Lance seulement le dashboard
 	cd apps/dashboard && $(PNPM) dev
+
+agents: agents-up ## Alias → agents-up (lance les 9 agents Python en background)
 
 agents-up: ## Lance les 9 agents Python (avec PIDs dans /tmp/chimera_agents.pids)
 	@echo "🐝 Démarrage des agents Python..."
@@ -124,6 +148,8 @@ agents-up: ## Lance les 9 agents Python (avec PIDs dans /tmp/chimera_agents.pids
 	@echo "✅ 9 agents Python démarrés — PIDs dans $(AGENT_PID_FILE)"
 	@echo "   Logs : $(AGENT_LOG_DIR)/"
 
+stop-agents: agents-down ## Alias → agents-down (arrête les agents Python)
+
 agents-down: ## Arrête tous les agents Python (via PID file)
 	@if [ -f $(AGENT_PID_FILE) ]; then \
 		echo "🛑 Arrêt des agents Python..."; \
@@ -161,6 +187,8 @@ agents-status: ## Vérifie l'état de santé de chaque agent Python
 	check_agent discovery     $${AGENT_DISCOVERY_PORT:-8008}; \
 	check_agent knowledge     $${AGENT_KNOWLEDGE_PORT:-8009}
 
+logs-agents: logs ## Alias → logs (tail des logs agents Python)
+
 logs: ## Affiche les logs de tous les agents (tail -f)
 	@echo "📋 Logs des agents Python ($(AGENT_LOG_DIR)/) — Ctrl+C pour quitter"
 	@if ls $(AGENT_LOG_DIR)/*.log >/dev/null 2>&1; then \
@@ -189,6 +217,10 @@ test: ## Lance tous les tests (Node.js + Python)
 test-python: ## Lance les tests Python uniquement
 	@echo "🧪 Tests Python..."
 	$(UV) run pytest agents/ apps/ -v --tb=short
+
+test-node: ## Lance les tests Node.js uniquement (tous les packages pnpm)
+	@echo "🧪 Tests Node.js..."
+	$(PNPM) turbo run test
 
 test-queen: ## Tests Node.js de la Queen
 	cd apps/queen && $(PNPM) test
@@ -219,20 +251,31 @@ docker-reset: ## Reset complet (volumes inclus)
 
 # ── Migration ────────────────────────────────────────────────────────────────
 
+db-migrate: ## Lance les migrations Prisma (@chimera/db)
+	@echo "🗄️  Migration base de données..."
+	$(PNPM) --filter @chimera/db db:migrate
+	@echo "✅ Migration terminée"
+
 migrate: ## Migre les projets existants vers chimera/
 	@echo "🔄 Migration des projets existants..."
 	bash infra/scripts/migrate.sh
 
 # ── Utilitaires ──────────────────────────────────────────────────────────────
 
-clean: ## Nettoie les artefacts de build
+clean: ## Nettoie les artefacts de build (.next, dist, __pycache__)
 	$(PNPM) turbo run clean
 	find . -name '__pycache__' -exec rm -rf {} + 2>/dev/null; true
 	find . -name '*.pyc' -delete 2>/dev/null; true
+	find . -name '.next' -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; true
+	find . -name 'dist' -not -path '*/node_modules/*' -exec rm -rf {} + 2>/dev/null; true
 	@echo "✅ Nettoyé"
 
-lint: ## Linte tout le code
+lint: ## Linte tout le code (ESLint + black + flake8)
 	$(PNPM) turbo run lint
+	@echo "🐍 Lint Python (black --check)..."
+	$(UV) run black --check agents/ apps/ packages/ 2>/dev/null || true
+	@echo "🐍 Lint Python (flake8)..."
+	$(UV) run flake8 agents/ apps/ packages/ 2>/dev/null || true
 
 type-check: ## Vérifie les types TypeScript
 	$(PNPM) turbo run type-check
