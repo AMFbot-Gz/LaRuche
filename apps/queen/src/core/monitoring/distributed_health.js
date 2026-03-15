@@ -1,12 +1,15 @@
 // core/monitoring/distributed_health.js — Monitoring distribué des couches
+import { circuitRegistry, CircuitState } from '../../utils/circuitBreaker.js';
+import { SERVICES } from '../../utils/resilientFetch.js';
+
 const LAYERS = [
-  { name: 'Queen Python',  url: 'http://localhost:8001/health' },
-  { name: 'Perception',    url: 'http://localhost:8002/health' },
-  { name: 'Brain',         url: 'http://localhost:8003/health' },
-  { name: 'Executor',      url: 'http://localhost:8004/health' },
-  { name: 'Evolution',     url: 'http://localhost:8005/health' },
-  { name: 'Memory',        url: 'http://localhost:8006/health' },
-  { name: 'MCP Bridge',    url: 'http://localhost:8007/health' },
+  { name: 'Queen Python',  url: 'http://localhost:8001/health', service: SERVICES.QUEEN_PYTHON },
+  { name: 'Perception',    url: 'http://localhost:8002/health', service: SERVICES.PERCEPTION   },
+  { name: 'Brain',         url: 'http://localhost:8003/health', service: SERVICES.BRAIN        },
+  { name: 'Executor',      url: 'http://localhost:8004/health', service: SERVICES.EXECUTOR     },
+  { name: 'Evolution',     url: 'http://localhost:8005/health', service: SERVICES.EVOLUTION    },
+  { name: 'Memory',        url: 'http://localhost:8006/health', service: SERVICES.MEMORY       },
+  { name: 'MCP Bridge',    url: 'http://localhost:8007/health', service: SERVICES.MCP_BRIDGE   },
 ];
 
 const BASE_INTERVAL = 15000;   // 15s en nominal
@@ -18,11 +21,15 @@ export class DistributedHealthMonitor {
     this.bus     = eventBus;
     this.state   = new Map(); // name → { status, failures, lastCheck, latency }
     this.timers  = new Map();
+    // Injecter le bus dans le registry des circuits dès construction
+    circuitRegistry.setEventBus(eventBus);
   }
 
   start() {
     for (const layer of LAYERS) {
       this.state.set(layer.name, { status: 'unknown', failures: 0, lastCheck: null, latency: 0 });
+      // Pré-enregistrer les circuits pour chaque service
+      circuitRegistry.get(layer.service, { callTimeoutMs: TIMEOUT_MS });
       this._scheduleCheck(layer, BASE_INTERVAL);
     }
     console.log('[HealthMonitor] 🟢 Démarré — surveillance de', LAYERS.length, 'couches');
@@ -60,6 +67,11 @@ export class DistributedHealthMonitor {
       if (prev.status !== 'ok') {
         console.log(`[HealthMonitor] ✅ ${layer.name} — récupéré (${latency}ms)`);
         this.bus?.emit('layer.recovered', { name: layer.name, latency });
+        // Sync circuit : service rétabli → réinitialiser le circuit si ouvert
+        const cb = circuitRegistry.get(layer.service);
+        if (cb.getState().state !== CircuitState.CLOSED) {
+          cb.reset();
+        }
       }
       this.state.set(layer.name, { status: 'ok', failures: 0, lastCheck: Date.now(), latency });
       this._scheduleCheck(layer, BASE_INTERVAL);
@@ -74,9 +86,20 @@ export class DistributedHealthMonitor {
     }
   }
 
+  /**
+   * État combiné santé + circuits — utilisé par le dashboard /status.
+   */
   getStatus() {
     const out = {};
-    for (const [name, s] of this.state) out[name] = s;
+    const circuits = circuitRegistry.getAll();
+    for (const [name, s] of this.state) {
+      // Retrouver le service associé à ce layer
+      const layer = LAYERS.find(l => l.name === name);
+      out[name] = {
+        ...s,
+        circuit: layer ? (circuits[layer.service] ?? null) : null,
+      };
+    }
     return out;
   }
 

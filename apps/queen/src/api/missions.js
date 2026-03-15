@@ -10,6 +10,7 @@
 import { randomUUID } from "crypto";
 import { missionQueue } from "../missionQueue.js";
 import { canTransition } from "../types/mission.js";
+import { circuitRegistry } from "../utils/circuitBreaker.js";
 
 // ─── Store in-memory des missions en cours ─────────────────────────────────────
 // missionId → { id, command, status, result, events, startedAt, timeoutAt }
@@ -282,6 +283,7 @@ export function createMissionsRoutes(app, deps) {
         swarm: nodeRegistry.stats(),
       },
       layers_health: healthMonitor?.getStatus() ?? null,
+      circuit_breakers: circuitRegistry.getAll(),
       cache_metrics: missionCache?.getMetrics() ?? null,
       event_bus: eventBus?.getMetrics() ?? null,
       timestamp: new Date().toISOString(),

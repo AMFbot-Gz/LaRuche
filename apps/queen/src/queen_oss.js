@@ -29,6 +29,7 @@ import eventBus from '../core/events/event_bus.js';
 import { DistributedHealthMonitor } from '../core/monitoring/distributed_health.js';
 import MultilevelCache from '../core/cache/multilevel_cache.js';
 import { startDashboardWSServer, broadcastDashboard } from './services/websocket_server.js';
+import { resilientFireAndForget, SERVICES } from './utils/resilientFetch.js';
 
 dotenv.config();
 
@@ -392,20 +393,24 @@ Réponse courte et directe.`;
       });
     }
 
-    // Sync épisode vers la couche mémoire Python (non-bloquant)
-    fetch('http://localhost:8006/episode', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mission: command,
-        result: synthesis.text.slice(0, 500),
-        success: true,
-        duration_ms: mission.duration_ms,
-        model_used: mission.models_used.join(','),
-        skills_used: [],
-      }),
-    // FIX 1 — Loggue toujours les erreurs de sauvegarde d'épisode (appel mémoire critique)
-    }).catch((err) => console.warn('[Queen] ⚠️  Episode non sauvegardé:', err.message));
+    // Sync épisode vers la couche mémoire Python (non-bloquant, protégé par circuit breaker)
+    resilientFireAndForget(
+      SERVICES.MEMORY,
+      '/episode',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mission: command,
+          result: synthesis.text.slice(0, 500),
+          success: true,
+          duration_ms: mission.duration_ms,
+          model_used: mission.models_used.join(','),
+          skills_used: [],
+        }),
+      },
+      'Episode sync Memory:8006',
+    );
 
     return `${synthesis.text}\n\n_⏱ ${(mission.duration_ms / 1000).toFixed(1)}s — Modèles: ${mission.models_used.join(", ")}_`;
   } catch (err) {

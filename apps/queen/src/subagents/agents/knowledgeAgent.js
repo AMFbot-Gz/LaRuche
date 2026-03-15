@@ -8,11 +8,13 @@
 import { readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
+import { resilientFetch, SERVICES } from "../../utils/resilientFetch.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 // Racine du projet : src/subagents/agents/ → ../../.. = ROOT
 const ROOT = resolve(__dirname, "../../..");
 
+// BRAIN_URL conservé pour référence, mais les appels passent par resilientFetch
 const BRAIN_URL = process.env.BRAIN_URL || "http://localhost:8003";
 
 /**
@@ -116,7 +118,7 @@ export async function run(task) {
   const userPrompt = enrichedParts.join("\n");
 
   try {
-    const response = await fetch(`${BRAIN_URL}/raw`, {
+    const response = await resilientFetch(SERVICES.BRAIN, '/raw', {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
