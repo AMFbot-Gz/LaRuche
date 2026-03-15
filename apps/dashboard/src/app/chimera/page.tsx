@@ -12,6 +12,8 @@
 import React, { useState, FormEvent } from 'react';
 import { useChimeraSocket } from '../../hooks/useChimeraSocket';
 import { useChimeraStore }  from '../../store/chimera';
+import { HitlCard }         from '../../components/HitlCard';
+import { HitlBadge }        from '../../components/HitlBadge';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // Widget 1 — HiveStatus
@@ -298,6 +300,7 @@ function QuickAction({ sendCommand }: { sendCommand: (type: string, data?: Recor
 
 export default function ChimeraPage() {
   const { sendCommand } = useChimeraSocket();
+  const hitlRequests    = useChimeraStore((s) => s.hitlRequests);
 
   return (
     <div style={{
@@ -318,9 +321,12 @@ export default function ChimeraPage() {
             🧠
           </div>
           <div>
-            <h1 style={{ color: 'white', fontSize: '22px', fontWeight: 700, margin: 0 }}>
-              Chimera OS
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <h1 style={{ color: 'white', fontSize: '22px', fontWeight: 700, margin: 0 }}>
+                Chimera OS
+              </h1>
+              <HitlBadge />
+            </div>
             <p style={{ color: '#6b7280', fontSize: '13px', margin: '2px 0 0' }}>
               Dashboard temps réel · Queen + 7 agents
             </p>
@@ -339,6 +345,9 @@ export default function ChimeraPage() {
         <LiveLogs />
         <QuickAction sendCommand={sendCommand} />
       </div>
+
+      {/* Panneau flottant HITL — rendu en dehors de la grille pour position:fixed */}
+      <HitlCard requests={hitlRequests} />
     </div>
   );
 }

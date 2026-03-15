@@ -12,6 +12,7 @@ Endpoints :
   GET  /status         — état détaillé des agents + missions
   POST /orchestrate    — orchestrer une mission complète
   POST /delegate       — déléguer une tâche atomique à un agent
+  POST /react          — exécuter un goal via le loop ReAct (Reason-Act-Observe)
   GET  /missions       — liste missions en cours / terminées
   GET  /missions/{id}  — détail d'une mission
 
@@ -38,6 +39,7 @@ from agents.orchestration.schemas.orchestration_schemas import (
 )
 from agents.orchestration.services.agent_dispatcher import AgentDispatcher
 from agents.orchestration.services.mission_planner import MissionPlanner
+from agents.orchestration.services.react_planner import AVAILABLE_SKILLS, ReActPlanner
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 

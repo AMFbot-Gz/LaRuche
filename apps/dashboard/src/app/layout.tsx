@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ClerkProvider } from '@clerk/nextjs';
 import Providers from './providers';
 import '@saas/ui-kit/src/styles/globals.css';
 
@@ -16,12 +17,14 @@ export default function RootLayout({
     children: React.ReactNode;
 }) {
     return (
-        <html lang="en" className="dark">
-            <body className="bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500/30">
-                <Providers>
-                    {children}
-                </Providers>
-            </body>
-        </html>
+        <ClerkProvider>
+            <html lang="en" className="dark">
+                <body className="bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500/30">
+                    <Providers>
+                        {children}
+                    </Providers>
+                </body>
+            </html>
+        </ClerkProvider>
     );
 }

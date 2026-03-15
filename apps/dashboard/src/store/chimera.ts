@@ -35,6 +35,17 @@ export interface ActiveMission {
   startTs: number;
 }
 
+export interface HitlRequest {
+  requestId: string;
+  missionId: string;
+  question:  string;
+  options:   string[];   // si vide → oui/non
+  risk:      number;     // 0.0-1.0
+  timeoutMs: number;
+  expiresAt: number;     // timestamp ms
+  ts:        number;
+}
+
 // ─── Store ─────────────────────────────────────────────────────────────────────
 
 interface ChimeraStore {
@@ -55,6 +66,11 @@ interface ChimeraStore {
   // Mission active
   activeMission:    ActiveMission | null;
   setActiveMission: (m: ActiveMission | null) => void;
+
+  // HITL — demandes d'intervention humaine en attente
+  hitlRequests:      HitlRequest[];
+  addHitlRequest:    (r: HitlRequest) => void;
+  removeHitlRequest: (requestId: string) => void;
 }
 
 const MAX_LOGS = 50;
@@ -115,4 +131,17 @@ export const useChimeraStore = create<ChimeraStore>((set) => ({
   // ── Mission active ─────────────────────────────────────────────────────────
   activeMission:    null,
   setActiveMission: (m) => set({ activeMission: m }),
+
+  // ── HITL ───────────────────────────────────────────────────────────────────
+  hitlRequests: [],
+
+  addHitlRequest: (r) =>
+    set((state) => ({
+      hitlRequests: [...state.hitlRequests.filter((x) => x.requestId !== r.requestId), r],
+    })),
+
+  removeHitlRequest: (requestId) =>
+    set((state) => ({
+      hitlRequests: state.hitlRequests.filter((x) => x.requestId !== requestId),
+    })),
 }));

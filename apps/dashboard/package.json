@@ -10,27 +10,28 @@
         "type-check": "tsc --noEmit"
     },
     "dependencies": {
-        "@saas/ui-kit": "workspace:*",
+        "@clerk/nextjs": "^7.0.4",
         "@saas/common": "workspace:*",
+        "@saas/ui-kit": "workspace:*",
+        "@tanstack/react-query": "^5.0.0",
+        "clsx": "^2.0.0",
+        "date-fns": "^2.30.0",
+        "framer-motion": "^10.16.0",
+        "lucide-react": "^0.290.0",
         "next": "^15.1.0",
         "react": "^19.0.0",
         "react-dom": "^19.0.0",
-        "@tanstack/react-query": "^5.0.0",
         "sonner": "^1.0.0",
-        "lucide-react": "^0.290.0",
-        "framer-motion": "^10.16.0",
-        "clsx": "^2.0.0",
         "tailwind-merge": "^2.0.0",
-        "date-fns": "^2.30.0",
         "zustand": "^4.5.0"
     },
     "devDependencies": {
         "@types/node": "^22.0.0",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
-        "typescript": "^5.7.0",
         "autoprefixer": "^10.0.1",
         "postcss": "^8",
-        "tailwindcss": "^3.3.0"
+        "tailwindcss": "^3.3.0",
+        "typescript": "^5.7.0"
     }
 }

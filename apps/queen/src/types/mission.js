@@ -8,24 +8,26 @@ import { randomUUID } from 'crypto';
 
 // ─── Statuts normalisés ────────────────────────────────────────────────────────
 export const MissionStatus = {
-  PENDING:   'pending',
-  RUNNING:   'running',
-  SUCCESS:   'success',
-  PARTIAL:   'partial',    // certains steps ont échoué
-  FAILED:    'failed',     // mission complètement échouée
-  CANCELLED: 'cancelled',
-  TIMEOUT:   'timeout',
+  PENDING:             'pending',
+  RUNNING:             'running',
+  WAITING_FOR_INPUT:   'waiting_for_input',  // HITL pause — en attente de l'utilisateur
+  SUCCESS:             'success',
+  PARTIAL:             'partial',    // certains steps ont échoué
+  FAILED:              'failed',     // mission complètement échouée
+  CANCELLED:           'cancelled',
+  TIMEOUT:             'timeout',
 };
 
 // Transitions autorisées (machine d'état stricte)
 export const VALID_TRANSITIONS = {
-  pending:   ['running', 'cancelled'],
-  running:   ['success', 'partial', 'failed', 'timeout', 'cancelled'],
-  success:   [],  // terminal
-  partial:   [],  // terminal
-  failed:    [],  // terminal
-  cancelled: [],  // terminal
-  timeout:   [],  // terminal
+  pending:           ['running', 'cancelled'],
+  running:           ['success', 'partial', 'failed', 'timeout', 'cancelled', 'waiting_for_input'],
+  waiting_for_input: ['running', 'cancelled', 'timeout'],  // reprend ou abandonne
+  success:           [],  // terminal
+  partial:           [],  // terminal
+  failed:            [],  // terminal
+  cancelled:         [],  // terminal
+  timeout:           [],  // terminal
 };
 
 /**
@@ -35,6 +37,13 @@ export const VALID_TRANSITIONS = {
  */
 export function isTerminal(status) {
   return ['success', 'partial', 'failed', 'cancelled', 'timeout'].includes(status);
+}
+
+/**
+ * Indique si une mission est en attente d'une réponse HITL.
+ */
+export function isWaitingForInput(status) {
+  return status === 'waiting_for_input';
 }
 
 /**

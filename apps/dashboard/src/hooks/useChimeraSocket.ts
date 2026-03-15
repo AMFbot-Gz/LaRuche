@@ -39,7 +39,7 @@ export function useChimeraSocket() {
   const wsRef    = useRef<WebSocket | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { setConnected, pushLog, setAgentStatus, setActiveMission } = useChimeraStore();
+  const { setConnected, pushLog, setAgentStatus, setActiveMission, addHitlRequest, removeHitlRequest } = useChimeraStore();
 
   // ── Dispatcher d'événements ─────────────────────────────────────────────────
   const handleEvent = useCallback((msg: WsEvent) => {
@@ -77,8 +77,16 @@ export function useChimeraSocket() {
       case 'mission_error':
         setActiveMission(null);
         break;
+
+      // HITL — demandes d'intervention humaine
+      case 'hitl_request':
+        addHitlRequest(msg as any);
+        break;
+      case 'hitl_resolved':
+        removeHitlRequest(msg.requestId as string);
+        break;
     }
-  }, [pushLog, setAgentStatus, setActiveMission]);
+  }, [pushLog, setAgentStatus, setActiveMission, addHitlRequest, removeHitlRequest]);
 
   // ── Connexion / reconnexion ──────────────────────────────────────────────────
   useEffect(() => {

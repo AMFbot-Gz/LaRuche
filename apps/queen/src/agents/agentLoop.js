@@ -1,8 +1,9 @@
 /**
- * agentLoop.js — LaRuche Agent Loop v4.1
+ * agentLoop.js — LaRuche Agent Loop v4.2
  * Converti de TypeScript vers JavaScript pur (pas de build step requis)
  * fix(C4): HITL activé avec TOOL_RISK_MAP + requestHITL()
  * fix(C5): chemin config corrigé configuration/agents/ → config/agents/
+ * feat(conscience): requestHITL() délègue au hitlManager centralisé
  */
 
 import { readFileSync, existsSync } from "fs";
@@ -13,6 +14,7 @@ import { parse as parseYaml } from "../utils/yaml.js";
 import { LLMProvider } from "../llm/provider.js";
 import { ToolRouter } from "../tools/toolRouter.js";
 import { buildSystemPrompt } from "../context/agentIdentity.js";
+import { hitlManager } from "../core/hitl_manager.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "../../");
@@ -42,27 +44,30 @@ function getToolRisk(toolName) {
   return TOOL_RISK_MAP[toolName] ?? 0.5;
 }
 
-async function requestHITL(toolName, args, threshold, timeoutMs) {
-  timeoutMs = timeoutMs ?? parseInt(process.env.HITL_TIMEOUT_SEC || '60') * 1000;
+/**
+ * Demande une approbation HITL via le HITLManager centralisé.
+ *
+ * @param {string} toolName   — nom de l'outil à exécuter
+ * @param {object} args       — arguments de l'outil (pour le contexte)
+ * @param {number} threshold  — seuil de risque (0.0–1.0)
+ * @param {number} timeoutMs  — timeout en ms
+ * @param {string} missionId  — ID de la mission parente (pour état WAITING_FOR_INPUT)
+ * @returns {Promise<boolean>}
+ */
+async function requestHITL(toolName, args, threshold, timeoutMs, missionId = 'unknown') {
+  timeoutMs = timeoutMs ?? parseInt(process.env.HITL_TIMEOUT_SEC || '120') * 1000;
   const risk = getToolRisk(toolName);
-  if (risk < threshold) return true; // approbation automatique
 
-  console.warn(`[HITL] Outil "${toolName}" risque ${risk.toFixed(1)} ≥ seuil ${threshold.toFixed(1)} — en attente d'approbation`);
+  // En dessous du seuil → action automatique, pas d'interruption
+  if (risk < threshold) return true;
 
-  if (process.env.HITL_AUTO_APPROVE === 'true') return true;
-  if (process.env.HITL_AUTO_REJECT === 'true') return false;
+  // Mode disabled → jamais d'interruption
+  if (process.env.HITL_MODE === 'disabled') return true;
 
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      console.warn(`[HITL] Timeout (${timeoutMs}ms) pour "${toolName}" — auto-rejet`);
-      resolve(false);
-    }, timeoutMs);
-
-    process.once('laruche:hitl_response', (approved) => {
-      clearTimeout(timer);
-      resolve(approved);
-    });
-  });
+  // Délégation au HITLManager centralisé
+  const question = `L'outil "${toolName}" demande une approbation.\nArguments : ${JSON.stringify(args, null, 2).slice(0, 200)}`;
+  const { approved } = await hitlManager.request(missionId, question, [], risk, timeoutMs);
+  return approved;
 }
 
 // --- Implementation ----------------------------------------------------------
