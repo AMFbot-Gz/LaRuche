@@ -884,8 +884,8 @@ function checkDotEnv() {
 }
 
 async function checkAgents() {
-  const agentPorts = [8001, 8002, 8003, 8004, 8005, 8006, 8007];
-  const agentNames = ['orchestration', 'perception', 'brain', 'executor', 'evolution', 'memory', 'mcp-bridge'];
+  const agentPorts = [8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009];
+  const agentNames = ['orchestration', 'perception', 'brain', 'executor', 'evolution', 'memory', 'mcp-bridge', 'discovery', 'knowledge'];
   const results = await Promise.all(
     agentPorts.map(async (port, idx) => {
       try {

@@ -1,4 +1,6 @@
 {
+  "_readme": "Ce fichier est de la DOCUMENTATION DE RÉFÉRENCE uniquement. Il n'est lu par aucun code. La configuration active vient de .env (copier depuis .env.example). Pour activer la Conscience HITL, ajoutez HITL_MODE=auto dans votre .env.",
+
   "chimera": {
     "version": "1.0.0",
     "environment": "development",
@@ -20,7 +22,9 @@
       "executor":      { "port": 8004, "enabled": true, "timeout_seconds": 60, "instances": 2 },
       "evolution":     { "port": 8005, "enabled": true, "interval_hours": 3, "max_proposals": 3 },
       "memory":        { "port": 8006, "enabled": true, "max_episodes": 1000 },
-      "mcp_bridge":    { "port": 8007, "enabled": true, "timeout_seconds": 30 }
+      "mcp_bridge":    { "port": 8007, "enabled": true, "timeout_seconds": 30 },
+      "discovery":     { "port": 8008, "enabled": true },
+      "knowledge":     { "port": 8009, "enabled": true }
     },
 
     "llm": {
@@ -94,10 +98,12 @@
     },
 
     "consciousness": {
+      "_doc": "Activé via .env: HITL_MODE=auto HITL_THRESHOLD=0.7 HITL_TIMEOUT_SECONDS=120",
       "enabled": false,
-      "mode": "ultimate",
-      "heartbeat_interval_seconds": 30,
-      "auto_deployment": true
+      "mode": "auto",
+      "hitl_threshold": 0.7,
+      "hitl_timeout_seconds": 120,
+      "heartbeat_interval_seconds": 30
     },
 
     "monitoring": {

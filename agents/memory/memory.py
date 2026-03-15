@@ -8,7 +8,6 @@ Trois couches :
 """
 
 import json
-import logging
 import os
 import re
 import threading
@@ -20,7 +19,10 @@ from pathlib import Path
 
 import numpy as np
 
+from agents.chimera_logging import get_logger
 from agents.memory.services.encryption_service import encryption_service
+
+logger = get_logger("memory")
 
 BASE_DIR      = Path(__file__).parent.parent
 STATE_FILE    = BASE_DIR / "memory" / "state.json"
@@ -38,8 +40,6 @@ _DEFAULT_STATE = {
     "uptime_start":   None,
     "total_actions":  0,
 }
-
-logging.basicConfig(level=logging.WARNING)
 
 
 # ─── Cache LRU simple ────────────────────────────────────────────────────────
@@ -104,7 +104,7 @@ class AgentMemory:
             self._encoder = TextEmbedding(model_name="BAAI/bge-small-en-v1.5")
             self._encoder_type = "fastembed"
         except Exception as e:
-            logging.warning(f"fastembed indisponible : {e}")
+            logger.warning(f"fastembed indisponible : {e}")
             self._encoder = None
             self._encoder_type = "none"
 
@@ -119,7 +119,7 @@ class AgentMemory:
                 metadata={"hnsw:space": "cosine"},
             )
         except Exception as e:
-            logging.warning(f"ChromaDB indisponible : {e} — fallback texte activé")
+            logger.warning(f"ChromaDB indisponible : {e} — fallback texte activé")
             self._chroma = None
             self._collection = None
 
@@ -155,7 +155,7 @@ class AgentMemory:
             self._embed_cache.set(text, vec)
             return vec
         except Exception as e:
-            logging.warning(f"encode: erreur — {e}")
+            logger.warning(f"encode: erreur — {e}")
             return np.zeros(384, dtype=np.float32)
 
     # ─── 2. save_experience ──────────────────────────────────────────────────
@@ -216,7 +216,7 @@ class AgentMemory:
             tmp.write_text(json.dumps(doc, ensure_ascii=False, indent=2), encoding="utf-8")
             tmp.rename(final)
         except Exception as e:
-            logging.error(f"save_experience: écriture vault — {e}")
+            logger.error(f"save_experience: écriture vault — {e}")
 
         # ── ChromaDB ─────────────────────────────────────────────────────────
         if self._collection:
@@ -238,7 +238,7 @@ class AgentMemory:
                     }],
                 )
             except Exception as e:
-                logging.error(f"save_experience: ChromaDB — {e}")
+                logger.error(f"save_experience: ChromaDB — {e}")
 
         # ── Mise à jour state ─────────────────────────────────────────────────
         key = "tasks_success" if ok else "tasks_failed"
@@ -252,7 +252,7 @@ class AgentMemory:
             try:
                 self._extract_patterns()
             except Exception as e:
-                logging.warning(f"_extract_patterns: {e}")
+                logger.warning(f"_extract_patterns: {e}")
 
         self._log(f"save_experience:{exp_id}", ok)
         return str(final)  # compat ancienne API qui retourne un chemin
@@ -359,7 +359,7 @@ class AgentMemory:
         try:
             all_data = self._collection.get(include=["embeddings", "metadatas", "documents"])
         except Exception as e:
-            logging.warning(f"_extract_patterns get: {e}")
+            logger.warning(f"_extract_patterns get: {e}")
             return
 
         embeddings = all_data.get("embeddings") or []
@@ -502,7 +502,7 @@ class AgentMemory:
             try:
                 self._collection.delete(ids=batch_ids)
             except Exception as e:
-                logging.warning(f"compress delete: {e}")
+                logger.warning(f"compress delete: {e}")
 
             compressed += len(batch_ids)
 
@@ -582,7 +582,7 @@ class AgentMemory:
                 })
             return out
         except Exception as e:
-            logging.warning(f"_query_chroma: {e}")
+            logger.warning(f"_query_chroma: {e}")
             return []
 
     def _fallback_search(self, task: str) -> str:
@@ -612,7 +612,7 @@ class AgentMemory:
                 state.update(loaded)
                 return state
             except Exception as e:
-                logging.warning(f"_load_or_create_state : état corrompu, reset — {e}")
+                logger.warning(f"_load_or_create_state : état corrompu, reset — {e}")
         state = dict(_DEFAULT_STATE)
         self._write_state(state)
         return state
