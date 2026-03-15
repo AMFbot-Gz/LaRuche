@@ -25,7 +25,6 @@ import os
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 
 # URL du Memory Agent (configurable via .env)
 _MEMORY_URL = os.getenv("AGENT_MEMORY_URL", "http://localhost:8006")

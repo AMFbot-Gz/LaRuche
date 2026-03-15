@@ -30,7 +30,6 @@ from __future__ import annotations
 
 import os
 import re
-import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -40,7 +39,11 @@ from pathlib import Path
 # Patterns regex bloqués — toute commande matchant l'un d'eux est rejetée
 BLOCKED_PATTERNS: list[tuple[str, str]] = [
     # Destruction fichiers
+    # FIX SEC-001 : couvre rm -rf, rm -fr, rm -r -f, rm -f -r, rm --recursive --force
     (r"rm\s+(-[a-z]*r[a-z]*f[a-z]*|-[a-z]*f[a-z]*r[a-z]*)\s+/", "rm -rf sur /"),
+    (r"rm\b.*\s-[a-z]*r\b.*\s-[a-z]*f\b.*/", "rm -r -f sur / (flags séparés)"),
+    (r"rm\b.*\s-[a-z]*f\b.*\s-[a-z]*r\b.*/", "rm -f -r sur / (flags séparés)"),
+    (r"rm\s+--recursive.*--force|rm\s+--force.*--recursive", "rm --recursive --force"),
     (r"\bdd\b.*of=", "dd avec of= (écrasement disque)"),
     (r"\bmkfs\b", "mkfs (formatage partition)"),
     (r"\bshred\b", "shred (effacement sécurisé)"),
@@ -59,8 +62,9 @@ BLOCKED_PATTERNS: list[tuple[str, str]] = [
     # Secrets système
     (r"cat\s+/etc/(passwd|shadow|sudoers)", "lecture fichiers sensibles"),
     (r"\benv\b.*\|.*grep.*(-i\s+)?(key|pass|secret|token|pwd)", "extraction secrets env"),
-    # Processus kill massif
-    (r"\bkill\s+-9\s+1\b", "kill init/PID1"),
+    # Processus kill massif — FIX SEC-002 : couvre kill -9 1, kill -9 -1, kill -SIGKILL
+    (r"\bkill\s+-9\s+[-]?1\b", "kill init/PID1 ou tous les processus"),
+    (r"\bkill\s+-(sigkill|9)\s+", "kill -SIGKILL (signal explicite)"),
     (r"\bpkill\s+-9\b", "pkill -9 massif"),
     # Réseau dangereux (SSRF vers IP privées)
     (r"curl.*169\.254\.", "SSRF metadata AWS/GCP"),

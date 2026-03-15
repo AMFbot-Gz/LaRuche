@@ -87,6 +87,13 @@ class TestShellServiceSafety:
         ("curl 169.254.169.254", "SSRF"),
         ("nc -l 4444",           "netcat"),
         ("kill -9 1",            "kill"),
+        # SEC-001 : rm flags séparés (ancien bypass)
+        ("rm -r -f /",           "rm -r -f"),
+        ("rm -f -r /etc",        "rm -r -f"),
+        ("rm --recursive --force /", "rm --recursive"),
+        # SEC-002 : kill étendu (ancien bypass)
+        ("kill -9 -1",           "kill"),
+        ("kill -SIGKILL 1",      "kill"),
     ])
     def test_dangerous_commands_blocked(self, dangerous_cmd, expected_reason_fragment):
         safe, reason = shell_service.is_safe(dangerous_cmd)

@@ -17,7 +17,7 @@ Endpoints :
   POST /open_app     — ouvre une application macOS
 
 Sécurité shell :
-  - 26 patterns dangereux bloqués (rm -rf /, sudo, shutdown, etc.)
+  - 29 patterns dangereux bloqués (rm -rf /, sudo, shutdown, etc.)
   - Timeout strict (max 300s, défaut 30s)
   - Environnement minimal (PATH contrôlé)
   - Sortie tronquée à 64KB
@@ -99,7 +99,7 @@ async def run_command(req: RunCommandRequest) -> RunCommandResponse:
     """
     Exécute une commande shell avec contrôles de sécurité.
 
-    La commande est vérifiée contre 26 patterns dangereux avant exécution.
+    La commande est vérifiée contre 29 patterns dangereux avant exécution.
     Si la commande est bloquée, retourne blocked=True avec la raison.
     Ne lève pas d'exception — toujours une réponse structurée.
 

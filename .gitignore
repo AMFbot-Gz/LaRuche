@@ -6,6 +6,7 @@ coverage/
 .turbo/
 __pycache__/
 *.pyc
+*.pyo
 .venv/
 .env
 *.log
@@ -15,3 +16,31 @@ logs/
 *.db
 agents/memory/data/
 skills/generated/
+
+# Cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.cache/
+
+# Artefacts temporaires
+*.tmp
+*.bak
+*.orig
+*.patch
+*.diff
+.backup/
+.new/
+.orig/
+.patch/
+.merged/
+cvelist
+cvelist-our
+cvelist.diff
+patcheck.tmp
+.mib2c-updaterc
+
+# Runtime
+.laruche/logs/
+.laruche/.initialized
