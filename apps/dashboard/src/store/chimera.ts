@@ -59,15 +59,25 @@ interface ChimeraStore {
 
 const MAX_LOGS = 50;
 
-// Agents attendus dans le cluster Chimera
+// Lit un port depuis process.env (Next.js expose les vars NEXT_PUBLIC_ au client)
+const getAgentPort = (envVar: string, fallback: number): number => {
+  if (typeof process !== 'undefined' && process.env[envVar]) {
+    return parseInt(process.env[envVar]!, 10);
+  }
+  return fallback;
+};
+
+// Agents attendus dans le cluster Chimera — ports lus depuis .env (source unique)
 const DEFAULT_AGENTS: AgentState[] = [
-  { name: 'orchestration', port: 8001, status: 'unknown', failures: 0, lastSeen: 0 },
-  { name: 'perception',    port: 8002, status: 'unknown', failures: 0, lastSeen: 0 },
-  { name: 'brain',         port: 8003, status: 'unknown', failures: 0, lastSeen: 0 },
-  { name: 'executor',      port: 8004, status: 'unknown', failures: 0, lastSeen: 0 },
-  { name: 'evolution',     port: 8005, status: 'unknown', failures: 0, lastSeen: 0 },
-  { name: 'memory',        port: 8006, status: 'unknown', failures: 0, lastSeen: 0 },
-  { name: 'mcp-bridge',    port: 8007, status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'orchestration', port: getAgentPort('NEXT_PUBLIC_AGENT_ORCHESTRATION_PORT', 8001), status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'perception',    port: getAgentPort('NEXT_PUBLIC_AGENT_PERCEPTION_PORT',    8002), status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'brain',         port: getAgentPort('NEXT_PUBLIC_AGENT_BRAIN_PORT',         8003), status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'executor',      port: getAgentPort('NEXT_PUBLIC_AGENT_EXECUTOR_PORT',      8004), status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'evolution',     port: getAgentPort('NEXT_PUBLIC_AGENT_EVOLUTION_PORT',     8005), status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'memory',        port: getAgentPort('NEXT_PUBLIC_AGENT_MEMORY_PORT',        8006), status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'mcp-bridge',    port: getAgentPort('NEXT_PUBLIC_AGENT_MCP_BRIDGE_PORT',    8007), status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'discovery',     port: getAgentPort('NEXT_PUBLIC_AGENT_DISCOVERY_PORT',     8008), status: 'unknown', failures: 0, lastSeen: 0 },
+  { name: 'knowledge',     port: getAgentPort('NEXT_PUBLIC_AGENT_KNOWLEDGE_PORT',     8009), status: 'unknown', failures: 0, lastSeen: 0 },
 ];
 
 export const useChimeraStore = create<ChimeraStore>((set) => ({

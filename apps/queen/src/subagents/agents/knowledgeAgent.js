@@ -15,7 +15,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "../../..");
 
 // BRAIN_URL conservé pour référence, mais les appels passent par resilientFetch
-const BRAIN_URL = process.env.BRAIN_URL || "http://localhost:8003";
+const BRAIN_URL = process.env.AGENT_BRAIN_URL || `http://localhost:${process.env.AGENT_BRAIN_PORT || 8003}`;
 
 /**
  * Charge les heuristiques depuis agent/memory/heuristics.jsonl.

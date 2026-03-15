@@ -3,13 +3,15 @@ import { circuitRegistry, CircuitState } from '../../utils/circuitBreaker.js';
 import { SERVICES } from '../../utils/resilientFetch.js';
 
 const LAYERS = [
-  { name: 'Queen Python',  url: 'http://localhost:8001/health', service: SERVICES.QUEEN_PYTHON },
-  { name: 'Perception',    url: 'http://localhost:8002/health', service: SERVICES.PERCEPTION   },
-  { name: 'Brain',         url: 'http://localhost:8003/health', service: SERVICES.BRAIN        },
-  { name: 'Executor',      url: 'http://localhost:8004/health', service: SERVICES.EXECUTOR     },
-  { name: 'Evolution',     url: 'http://localhost:8005/health', service: SERVICES.EVOLUTION    },
-  { name: 'Memory',        url: 'http://localhost:8006/health', service: SERVICES.MEMORY       },
-  { name: 'MCP Bridge',    url: 'http://localhost:8007/health', service: SERVICES.MCP_BRIDGE   },
+  { name: 'Queen Python',  url: `http://localhost:${process.env.AGENT_ORCHESTRATION_PORT || 8001}/health`, service: SERVICES.QUEEN_PYTHON },
+  { name: 'Perception',    url: `http://localhost:${process.env.AGENT_PERCEPTION_PORT    || 8002}/health`, service: SERVICES.PERCEPTION   },
+  { name: 'Brain',         url: `http://localhost:${process.env.AGENT_BRAIN_PORT         || 8003}/health`, service: SERVICES.BRAIN        },
+  { name: 'Executor',      url: `http://localhost:${process.env.AGENT_EXECUTOR_PORT      || 8004}/health`, service: SERVICES.EXECUTOR     },
+  { name: 'Evolution',     url: `http://localhost:${process.env.AGENT_EVOLUTION_PORT     || 8005}/health`, service: SERVICES.EVOLUTION    },
+  { name: 'Memory',        url: `http://localhost:${process.env.AGENT_MEMORY_PORT        || 8006}/health`, service: SERVICES.MEMORY       },
+  { name: 'MCP Bridge',    url: `http://localhost:${process.env.AGENT_MCP_BRIDGE_PORT    || 8007}/health`, service: SERVICES.MCP_BRIDGE   },
+  { name: 'Discovery',     url: `http://localhost:${process.env.AGENT_DISCOVERY_PORT     || 8008}/health`, service: SERVICES.DISCOVERY    },
+  { name: 'Knowledge',     url: `http://localhost:${process.env.AGENT_KNOWLEDGE_PORT     || 8009}/health`, service: SERVICES.KNOWLEDGE    },
 ];
 
 const BASE_INTERVAL = 15000;   // 15s en nominal

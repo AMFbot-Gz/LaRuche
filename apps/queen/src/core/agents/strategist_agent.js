@@ -11,7 +11,7 @@ export class StrategistAgent {
     this.event_bus = event_bus;
     this.memory    = memory;
     this.model     = options.model || 'claude-opus-4-6';
-    this.queen_url = options.queen_url || 'http://localhost:8003';  // Brain layer
+    this.queen_url = options.queen_url || `http://localhost:${process.env.AGENT_BRAIN_PORT || 8003}`;  // Brain layer
     this.name      = 'strategist';
   }
 
@@ -88,7 +88,7 @@ Sois précis, ambitieux et réaliste. Maximum 5 objectifs.`;
       });
       const req = http.request({
         hostname: 'localhost',
-        port:     8003,
+        port:     parseInt(process.env.AGENT_BRAIN_PORT) || 8003,
         path:     '/think',
         method:   'POST',
         headers:  { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },

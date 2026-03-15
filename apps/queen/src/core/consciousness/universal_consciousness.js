@@ -29,8 +29,8 @@ export class UniversalConsciousness {
   constructor(options = {}) {
     this.event_bus    = options.event_bus    || new NeuralEventBus();
     this.memory       = options.memory       || new EpisodicMemorySystem();
-    this.agent_queen_url = options.queen_url || 'http://localhost:8001';
-    this.node_queen_url  = options.node_url  || 'http://localhost:3000';
+    this.agent_queen_url = options.queen_url || `http://localhost:${process.env.AGENT_ORCHESTRATION_PORT || 8001}`;
+    this.node_queen_url  = options.node_url  || `http://localhost:${process.env.QUEEN_PORT || 3000}`;
 
     this.state = {
       self_awareness:           false,

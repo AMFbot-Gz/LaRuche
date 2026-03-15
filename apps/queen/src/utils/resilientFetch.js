@@ -24,25 +24,42 @@ import { circuitRegistry, CircuitOpenError } from './circuitBreaker.js';
 
 // ─── Registre des services internes ──────────────────────────────────────────
 
+// Ports lus depuis l'environnement (source unique : .env) avec fallbacks
+const PORTS = {
+  ORCHESTRATION: parseInt(process.env.AGENT_ORCHESTRATION_PORT) || 8001,
+  PERCEPTION:    parseInt(process.env.AGENT_PERCEPTION_PORT)    || 8002,
+  BRAIN:         parseInt(process.env.AGENT_BRAIN_PORT)         || 8003,
+  EXECUTOR:      parseInt(process.env.AGENT_EXECUTOR_PORT)      || 8004,
+  EVOLUTION:     parseInt(process.env.AGENT_EVOLUTION_PORT)     || 8005,
+  MEMORY:        parseInt(process.env.AGENT_MEMORY_PORT)        || 8006,
+  MCP_BRIDGE:    parseInt(process.env.AGENT_MCP_BRIDGE_PORT)    || 8007,
+  DISCOVERY:     parseInt(process.env.AGENT_DISCOVERY_PORT)     || 8008,
+  KNOWLEDGE:     parseInt(process.env.AGENT_KNOWLEDGE_PORT)     || 8009,
+};
+
 export const SERVICES = {
-  QUEEN_PYTHON: 'QueenPython:8001',
-  PERCEPTION:   'Perception:8002',
-  BRAIN:        'Brain:8003',
-  EXECUTOR:     'Executor:8004',
-  EVOLUTION:    'Evolution:8005',
-  MEMORY:       'Memory:8006',
-  MCP_BRIDGE:   'McpBridge:8007',
+  QUEEN_PYTHON: `QueenPython:${PORTS.ORCHESTRATION}`,
+  PERCEPTION:   `Perception:${PORTS.PERCEPTION}`,
+  BRAIN:        `Brain:${PORTS.BRAIN}`,
+  EXECUTOR:     `Executor:${PORTS.EXECUTOR}`,
+  EVOLUTION:    `Evolution:${PORTS.EVOLUTION}`,
+  MEMORY:       `Memory:${PORTS.MEMORY}`,
+  MCP_BRIDGE:   `McpBridge:${PORTS.MCP_BRIDGE}`,
+  DISCOVERY:    `Discovery:${PORTS.DISCOVERY}`,
+  KNOWLEDGE:    `Knowledge:${PORTS.KNOWLEDGE}`,
 };
 
 // Config par service (timeouts adaptés à la charge de chaque agent)
 const SERVICE_CONFIG = {
-  [SERVICES.QUEEN_PYTHON]: { baseUrl: 'http://localhost:8001', callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
-  [SERVICES.PERCEPTION]:   { baseUrl: 'http://localhost:8002', callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
-  [SERVICES.BRAIN]:        { baseUrl: 'http://localhost:8003', callTimeoutMs: 60_000, failureThreshold: 3, resetTimeoutMs: 60_000 },
-  [SERVICES.EXECUTOR]:     { baseUrl: 'http://localhost:8004', callTimeoutMs: 10_000, failureThreshold: 3, resetTimeoutMs: 30_000 },
-  [SERVICES.EVOLUTION]:    { baseUrl: 'http://localhost:8005', callTimeoutMs: 10_000, failureThreshold: 3, resetTimeoutMs: 30_000 },
-  [SERVICES.MEMORY]:       { baseUrl: 'http://localhost:8006', callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
-  [SERVICES.MCP_BRIDGE]:   { baseUrl: 'http://localhost:8007', callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.QUEEN_PYTHON]: { baseUrl: `http://localhost:${PORTS.ORCHESTRATION}`, callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.PERCEPTION]:   { baseUrl: `http://localhost:${PORTS.PERCEPTION}`,    callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.BRAIN]:        { baseUrl: `http://localhost:${PORTS.BRAIN}`,         callTimeoutMs: 60_000, failureThreshold: 3, resetTimeoutMs: 60_000 },
+  [SERVICES.EXECUTOR]:     { baseUrl: `http://localhost:${PORTS.EXECUTOR}`,      callTimeoutMs: 10_000, failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.EVOLUTION]:    { baseUrl: `http://localhost:${PORTS.EVOLUTION}`,     callTimeoutMs: 10_000, failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.MEMORY]:       { baseUrl: `http://localhost:${PORTS.MEMORY}`,        callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.MCP_BRIDGE]:   { baseUrl: `http://localhost:${PORTS.MCP_BRIDGE}`,    callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.DISCOVERY]:    { baseUrl: `http://localhost:${PORTS.DISCOVERY}`,     callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.KNOWLEDGE]:    { baseUrl: `http://localhost:${PORTS.KNOWLEDGE}`,     callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
 };
 
 // ─── Fonction principale ───────────────────────────────────────────────────────
