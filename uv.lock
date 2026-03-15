@@ -472,12 +472,16 @@ version = "1.0.0"
 source = { virtual = "agents/orchestration" }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
+    { name = "python-dotenv" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 
