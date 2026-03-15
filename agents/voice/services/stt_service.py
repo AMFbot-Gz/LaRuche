@@ -28,31 +28,42 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# ─── Disponibilité faster-whisper ─────────────────────────────────────────────
+# ─── Disponibilité faster-whisper (lazy — pas d'import au niveau module) ──────
+# L'import réel se fait dans _get_whisper_model() pour éviter le crash SIGABRT
+# causé par PyTorch qui s'initialise au niveau module dans les tests.
 
-try:
-    from faster_whisper import WhisperModel
-    _WHISPER_AVAILABLE = True
-    try:
-        import faster_whisper
-        _WHISPER_VERSION = getattr(faster_whisper, "__version__", "inconnu")
-    except Exception:
-        _WHISPER_VERSION = "inconnu"
-    logger.info("faster-whisper disponible (version %s)", _WHISPER_VERSION)
-except ImportError:
-    _WHISPER_AVAILABLE = False
-    _WHISPER_VERSION = None
-    logger.warning(
-        "faster-whisper non disponible — STT dégradé. "
-        "Installez via : pip install faster-whisper"
-    )
+_WHISPER_AVAILABLE: Optional[bool] = None  # None = pas encore vérifié
+_WHISPER_VERSION: Optional[str] = None
 
 # ─── Cache modèle (singleton par nom de modèle) ───────────────────────────────
 
-_model_cache: dict[str, "WhisperModel"] = {}
+_model_cache: dict[str, object] = {}
 
 
-def _get_whisper_model(model_name: str = "base") -> "WhisperModel":
+def _check_whisper_available() -> bool:
+    """
+    Vérifie la disponibilité de faster-whisper de façon lazy (premier appel seulement).
+    Évite le crash SIGABRT causé par l'import PyTorch au niveau module.
+    """
+    global _WHISPER_AVAILABLE, _WHISPER_VERSION
+    if _WHISPER_AVAILABLE is not None:
+        return _WHISPER_AVAILABLE
+    try:
+        import faster_whisper  # noqa: F401  — vérification de disponibilité
+        _WHISPER_VERSION = getattr(faster_whisper, "__version__", "inconnu")
+        _WHISPER_AVAILABLE = True
+        logger.info("faster-whisper disponible (version %s)", _WHISPER_VERSION)
+    except ImportError:
+        _WHISPER_AVAILABLE = False
+        _WHISPER_VERSION = None
+        logger.warning(
+            "faster-whisper non disponible — STT dégradé. "
+            "Installez via : pip install faster-whisper"
+        )
+    return _WHISPER_AVAILABLE
+
+
+def _get_whisper_model(model_name: str = "base") -> object:
     """
     Retourne le modèle Whisper demandé depuis le cache ou le charge.
 
@@ -60,6 +71,7 @@ def _get_whisper_model(model_name: str = "base") -> "WhisperModel":
     Sur Apple Silicon, device="cpu" + compute_type="int8" fonctionne bien.
     """
     if model_name not in _model_cache:
+        from faster_whisper import WhisperModel  # import lazy — évite SIGABRT
         logger.info("Chargement du modèle Whisper '%s'…", model_name)
         _model_cache[model_name] = WhisperModel(
             model_name,
@@ -97,7 +109,7 @@ async def transcribe_audio(
             "whisper_available":    bool,
         }
     """
-    if not _WHISPER_AVAILABLE:
+    if not _check_whisper_available():
         return _fallback_response()
 
     # Transcription bloquante → exécutée dans un thread pour ne pas bloquer la boucle asyncio
@@ -134,7 +146,7 @@ def _transcribe_sync(
             f.write(audio_bytes)
             tmp_path = f.name
 
-        model = _get_whisper_model(model_name)
+        model = _get_whisper_model(model_name)  # import lazy ici
 
         # VAD filtering intégré : silero-vad réduit les hallucinations sur le silence
         segments, info = model.transcribe(
@@ -215,17 +227,18 @@ def _fallback_response() -> dict:
 
 def get_stt_backend() -> str:
     """Retourne le nom du backend STT actif."""
-    return "faster-whisper" if _WHISPER_AVAILABLE else "fallback"
+    return "faster-whisper" if _check_whisper_available() else "fallback"
 
 
 def get_whisper_version() -> Optional[str]:
     """Retourne la version de faster-whisper si disponible."""
-    return _WHISPER_VERSION if _WHISPER_AVAILABLE else None
+    _check_whisper_available()
+    return _WHISPER_VERSION
 
 
 def is_whisper_available() -> bool:
     """True si faster-whisper est installé et importable."""
-    return _WHISPER_AVAILABLE
+    return _check_whisper_available()
 
 
 def get_supported_models() -> list[str]:
