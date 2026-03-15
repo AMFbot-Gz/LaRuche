@@ -16,6 +16,7 @@ import { registerConfigRoutes } from "../api/config_routes.js";
 import { registerMarketplaceRoutes } from "../api/marketplace.js";
 import { startCoeusLoop } from "../agents/coeus.js";
 import { createComputerUseRoutes } from "../api/computer_use_routes.js";
+import { registerBillingRoutes } from "../api/billing_routes.js";
 
 /**
  * Lance le serveur API standalone
@@ -63,6 +64,9 @@ export function startStandaloneServer(deps) {
   if (deps.computerUseLoop) {
     createComputerUseRoutes(app, { computerUseLoop: deps.computerUseLoop });
   }
+
+  // ─── Routes Billing Stripe ──────────────────────────────────────────────────
+  registerBillingRoutes(app);
 
   // ─── Route racine ───────────────────────────────────────────────────────────
   app.get("/", (c) =>
@@ -133,6 +137,10 @@ export function startStandaloneServer(deps) {
         "POST /api/marketplace/skills/:id/install",
         "POST /api/marketplace/skills/publish",
         "DELETE /api/marketplace/skills/:id",
+        "GET  /api/billing/plans",
+        "POST /api/billing/checkout",
+        "POST /api/billing/portal",
+        "POST /api/billing/webhook",
       ],
     })
   );
