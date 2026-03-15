@@ -8,9 +8,16 @@
  */
 
 import { randomUUID } from "crypto";
+import { existsSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 import { missionQueue } from "../missionQueue.js";
 import { canTransition } from "../types/mission.js";
 import { circuitRegistry } from "../utils/circuitBreaker.js";
+
+// Résolution du chemin ROOT (apps/queen/) pour les checks doctor
+const _missionsDir = dirname(fileURLToPath(import.meta.url));
+const _ROOT = join(_missionsDir, '../..');
 
 // ─── Store in-memory des missions en cours ─────────────────────────────────────
 // missionId → { id, command, status, result, events, startedAt, timeoutAt }
@@ -821,4 +828,105 @@ export function createMissionsRoutes(app, deps) {
       return c.json({ error: e.message }, 500);
     }
   });
+
+  // ─── GET /api/doctor ──────────────────────────────────────────────────────────
+  // Rapport de santé complet du système — utile pour diagnostiquer les installations
+  // Retourne 200 si tout est OK, 207 Multi-Status si des problèmes sont détectés
+  app.get('/api/doctor', async (c) => {
+    const checks = await runDoctorChecks();
+    const allOk = checks.every(ch => ch.status === 'ok');
+    return c.json(
+      {
+        healthy: allOk,
+        checks,
+        timestamp: new Date().toISOString(),
+      },
+      allOk ? 200 : 207  // 207 Multi-Status si au moins un problème
+    );
+  });
+}
+
+// ─── Checks Doctor ─────────────────────────────────────────────────────────────
+// Fonctions de diagnostic du système pour GET /api/doctor
+// Chaque check retourne { name, status: 'ok'|'warn'|'fail', message, fix? }
+
+async function runDoctorChecks() {
+  return Promise.all([
+    checkOllama(),
+    checkDotEnv(),
+    checkAgents(),
+    checkNodeVersion(),
+    checkDiskSpace(),
+    checkMemory(),
+  ]);
+}
+
+async function checkOllama() {
+  const host = process.env.OLLAMA_HOST || 'http://localhost:11434';
+  try {
+    const r = await fetch(`${host}/api/tags`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) return { name: 'ollama', status: 'fail', message: `Ollama répond avec HTTP ${r.status}`, fix: `Vérifiez qu'Ollama est lancé : ollama serve` };
+    const data = await r.json();
+    const models = data.models || [];
+    if (models.length === 0) return { name: 'ollama', status: 'warn', message: `Ollama démarré mais aucun modèle disponible`, fix: `Téléchargez un modèle : ollama pull llama3.2:3b` };
+    return { name: 'ollama', status: 'ok', message: `Ollama actif — ${models.length} modèle(s) : ${models.map(m => m.name).join(', ').substring(0, 80)}` };
+  } catch (e) {
+    return { name: 'ollama', status: 'fail', message: `Ollama n'est pas démarré (${host})`, fix: `Lancez : ollama serve` };
+  }
+}
+
+function checkDotEnv() {
+  const envPath = join(_ROOT, '.env');
+  if (!existsSync(envPath)) return { name: 'dotenv', status: 'fail', message: `.env absent`, fix: `Créez-le : cp .env.example .env  puis éditez les secrets` };
+  const secret = process.env.CHIMERA_SECRET || '';
+  if (!secret || secret === 'CHANGE_ME_openssl_rand_hex_32') return { name: 'dotenv', status: 'warn', message: `.env présent mais CHIMERA_SECRET non configuré`, fix: `Générez un secret : openssl rand -hex 32` };
+  return { name: 'dotenv', status: 'ok', message: `.env présent et CHIMERA_SECRET configuré` };
+}
+
+async function checkAgents() {
+  const agentPorts = [8001, 8002, 8003, 8004, 8005, 8006, 8007];
+  const agentNames = ['orchestration', 'perception', 'brain', 'executor', 'evolution', 'memory', 'mcp-bridge'];
+  const results = await Promise.all(
+    agentPorts.map(async (port, idx) => {
+      try {
+        const r = await fetch(`http://localhost:${port}/health`, { signal: AbortSignal.timeout(1500) });
+        return { port, name: agentNames[idx], ok: r.ok };
+      } catch { return { port, name: agentNames[idx], ok: false }; }
+    })
+  );
+  const down = results.filter(r => !r.ok);
+  const up = results.filter(r => r.ok);
+  if (down.length === agentPorts.length) return { name: 'agents', status: 'warn', message: `Aucun agent Python en ligne (${down.map(d => d.name).join(', ')})`, fix: `Lancez les agents : make agents-up` };
+  if (down.length > 0) return { name: 'agents', status: 'warn', message: `${up.length}/${agentPorts.length} agents actifs — hors ligne : ${down.map(d => d.name).join(', ')}`, fix: `Redémarrez les agents manquants : make agents-up` };
+  return { name: 'agents', status: 'ok', message: `${agentPorts.length}/${agentPorts.length} agents Python actifs` };
+}
+
+function checkNodeVersion() {
+  const raw = process.version;
+  const major = parseInt(raw.replace('v', '').split('.')[0], 10);
+  if (major >= 20) return { name: 'node_version', status: 'ok', message: `Node.js ${raw} (>= 20 requis)` };
+  return { name: 'node_version', status: 'fail', message: `Node.js ${raw} trop ancien (requis : >= 20)`, fix: `Mettez à jour Node.js : nvm install 20  ou  https://nodejs.org` };
+}
+
+async function checkDiskSpace() {
+  try {
+    const si = await import('systeminformation');
+    const disks = await si.default.fsSize();
+    if (!disks || disks.length === 0) return { name: 'disk_space', status: 'ok', message: 'Espace disque non vérifiable' };
+    const main = disks.reduce((a, b) => (b.size > a.size ? b : a), disks[0]);
+    const percent = Math.round(main.use || 0);
+    if (percent >= 90) return { name: 'disk_space', status: 'warn', message: `Disque ${main.fs} utilisé à ${percent}% — espace critique`, fix: `Libérez de l'espace disque (seuil critique : 90%)` };
+    return { name: 'disk_space', status: 'ok', message: `Disque ${main.fs} utilisé à ${percent}%` };
+  } catch {
+    return { name: 'disk_space', status: 'ok', message: 'Espace disque non vérifié (systeminformation indisponible)' };
+  }
+}
+
+function checkMemory() {
+  const mem = process.memoryUsage();
+  const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+  const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
+  const rssMB = Math.round(mem.rss / 1024 / 1024);
+  if (heapMB > 500) return { name: 'memory', status: 'warn', message: `Heap élevé : ${heapMB}MB / ${heapTotalMB}MB (RSS: ${rssMB}MB)`, fix: `Redémarrez la Queen : make queen` };
+  return { name: 'memory', status: 'ok', message: `Mémoire OK — Heap: ${heapMB}MB / ${heapTotalMB}MB, RSS: ${rssMB}MB` };
 }

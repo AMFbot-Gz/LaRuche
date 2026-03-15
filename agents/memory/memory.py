@@ -20,6 +20,8 @@ from pathlib import Path
 
 import numpy as np
 
+from agents.memory.services.encryption_service import encryption_service
+
 BASE_DIR      = Path(__file__).parent.parent
 STATE_FILE    = BASE_DIR / "memory" / "state.json"
 VAULT_DIR     = BASE_DIR / "vault"
@@ -220,10 +222,12 @@ class AgentMemory:
         if self._collection:
             try:
                 vec = self.encode(embedding_text).tolist()
+                # Chiffrement du document avant insertion (AES-256-GCM si activé)
+                chroma_doc = encryption_service.encrypt_document({"text": embedding_text})
                 self._collection.add(
                     ids=[exp_id],
                     embeddings=[vec],
-                    documents=[embedding_text],
+                    documents=[chroma_doc["text"]],
                     metadatas=[{
                         "success":         ok,
                         "timestamp":       time.time(),
@@ -360,7 +364,12 @@ class AgentMemory:
 
         embeddings = all_data.get("embeddings") or []
         metadatas  = all_data.get("metadatas")  or []
-        documents  = all_data.get("documents")  or []
+        # Déchiffrement des documents lus depuis ChromaDB
+        raw_docs  = all_data.get("documents") or []
+        documents = [
+            encryption_service.decrypt_document({"text": d})["text"]
+            for d in raw_docs
+        ]
 
         if len(embeddings) < 5:
             return
@@ -458,7 +467,12 @@ class AgentMemory:
 
         ids       = all_data.get("ids", [])
         metadatas = all_data.get("metadatas", [])
-        documents = all_data.get("documents", [])
+        # Déchiffrement des documents avant compression/résumé
+        raw_docs  = all_data.get("documents", [])
+        documents = [
+            encryption_service.decrypt_document({"text": d})["text"]
+            for d in raw_docs
+        ]
 
         old_ids = [
             ids[i] for i, m in enumerate(metadatas)
@@ -558,11 +572,13 @@ class AgentMemory:
             for eid, meta, dist, doc in zip(
                 ids_list, metadatas_list, distances_list, documents_list
             ):
+                # Déchiffrement du document après query (fallback gracieux si legacy)
+                decrypted = encryption_service.decrypt_document({"text": doc})
                 out.append({
                     "id":         eid,
                     "metadata":   meta,
                     "similarity": max(0.0, 1.0 - dist),
-                    "document":   doc,
+                    "document":   decrypted["text"],
                 })
             return out
         except Exception as e:

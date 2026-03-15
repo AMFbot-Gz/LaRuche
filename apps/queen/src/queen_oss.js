@@ -30,6 +30,7 @@ import { DistributedHealthMonitor } from '../core/monitoring/distributed_health.
 import MultilevelCache from '../core/cache/multilevel_cache.js';
 import { startDashboardWSServer, broadcastDashboard } from './services/websocket_server.js';
 import { resilientFireAndForget, SERVICES } from './utils/resilientFetch.js';
+import { isFirstRun, printWelcomeBanner, runFirstRunChecks, markInitialized } from './utils/firstRun.js';
 
 dotenv.config();
 
@@ -622,6 +623,18 @@ async function checkOllamaHealth() {
 logger.info("╔══════════════════════════════════════════╗");
 logger.info(`║ 🐝 LaRuche OSS v4.1 — ${STANDALONE ? "Standalone    " : "Telegram mode"} ║`);
 logger.info("╚══════════════════════════════════════════╝");
+
+// Premier démarrage : bannière de bienvenue + vérifications prérequis
+if (isFirstRun()) {
+  printWelcomeBanner();
+  const { ok, issues } = await runFirstRunChecks();
+  if (!ok) {
+    console.warn('\x1b[33m  ⚠️  Problèmes détectés au premier démarrage :\x1b[0m');
+    issues.forEach(i => console.warn(`     • ${i}`));
+    console.warn('');
+  }
+  markInitialized();
+}
 
 // Vérifie Ollama avant de démarrer l'API (Wave 2 — abstraction LLM)
 await checkOllamaHealth();
