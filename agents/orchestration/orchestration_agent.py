@@ -50,8 +50,9 @@ app = FastAPI(
 )
 
 # Singletons
-_dispatcher = AgentDispatcher()
-_planner    = MissionPlanner()
+_dispatcher    = AgentDispatcher()
+_planner       = MissionPlanner()
+_react_planner = ReActPlanner()
 
 # Store in-memory des missions (pas de DB)
 # clé = mission_id, valeur = MissionRecord
@@ -189,6 +190,33 @@ async def delegate(req: DelegateRequest) -> DelegateResponse:
         duration_ms = duration_ms,
         error       = dispatch_result.get("error"),
     )
+
+
+@app.post("/react")
+async def react(goal: str, max_steps: int = 10) -> dict:
+    """
+    Exécuter un goal via le loop ReAct (Reason-Act-Observe).
+
+    Pipeline :
+      1. Le LLM raisonne (Thought) et choisit un skill à exécuter (Action)
+      2. Le skill est dispatché vers l'agent compétent
+      3. L'observation est injectée dans le prochain prompt
+      4. Répète jusqu'à ce que le LLM émette une Final Answer ou que max_steps soit atteint
+
+    Body (query params) :
+      goal      — objectif en langage naturel (obligatoire)
+      max_steps — nombre maximum de cycles Think→Act→Observe (défaut : 10)
+
+    Retourne :
+      {
+        "success": bool,
+        "result":  str,         # Final Answer ou message d'erreur
+        "steps":   int,         # Nombre de cycles exécutés
+        "history": list[dict],  # Trace complète (thought/action/observation)
+      }
+    """
+    planner = ReActPlanner(max_steps=max_steps)
+    return await planner.execute(goal=goal, skills=AVAILABLE_SKILLS)
 
 
 @app.get("/missions")
