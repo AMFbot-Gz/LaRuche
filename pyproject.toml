@@ -6,7 +6,9 @@ members = [
   "agents/executor",
   "agents/evolution",
   "agents/memory",
-  "agents/mcp-bridge"
+  "agents/mcp-bridge",
+  "agents/discovery",
+  "agents/knowledge"
 ]
 
 [project]
