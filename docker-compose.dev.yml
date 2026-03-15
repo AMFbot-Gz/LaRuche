@@ -1,0 +1,119 @@
+# =============================================================================
+# Project Chimera — docker-compose.dev.yml (Développement)
+# =============================================================================
+# Surcharge docker-compose.yml pour le développement local :
+#   - Hot-reload activé (volumes montés sur le code source)
+#   - Variables NODE_ENV=development / uvicorn --reload
+#   - Logs verbeux
+#
+# Usage :
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml \
+#     --profile minimal up
+# =============================================================================
+
+services:
+
+  # ─── Agents Python — hot-reload via uvicorn --reload ─────────────────────
+
+  agent-orchestration:
+    command: uvicorn agents.orchestration.orchestration_agent:app --host 0.0.0.0 --port 8001 --reload
+    volumes:
+      - ./agents:/app/agents:ro
+      - ./:/app:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  agent-perception:
+    command: uvicorn agents.perception.perception_agent:app --host 0.0.0.0 --port 8002 --reload
+    volumes:
+      - ./agents:/app/agents:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  agent-brain:
+    command: uvicorn agents.brain.brain:app --host 0.0.0.0 --port 8003 --reload
+    volumes:
+      - ./agents:/app/agents:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  agent-executor:
+    command: uvicorn agents.executor.executor_agent:app --host 0.0.0.0 --port 8004 --reload
+    volumes:
+      - ./agents:/app/agents:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  agent-evolution:
+    command: uvicorn agents.evolution.auto_coder_bee:app --host 0.0.0.0 --port 8005 --reload
+    volumes:
+      - ./agents:/app/agents:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  agent-memory:
+    command: uvicorn agents.memory.memory_agent:app --host 0.0.0.0 --port 8006 --reload
+    volumes:
+      - ./agents:/app/agents:ro
+      # Données persistantes en dev sur le chemin local
+      - ./agents/memory/data/vector_store:/data/vector_store
+      - ./agents/memory/data/vault:/data/vault
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  agent-mcp-bridge:
+    working_dir: /app/agents/mcp-bridge
+    command: uvicorn mcp_bridge_agent:app --host 0.0.0.0 --port 8007 --reload
+    volumes:
+      - ./agents:/app/agents:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  agent-voice:
+    command: uvicorn agents.voice.voice_agent:app --host 0.0.0.0 --port 8010 --reload
+    volumes:
+      - ./agents:/app/agents:ro
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+
+  # ─── Queen Node.js — hot-reload via nodemon ──────────────────────────────
+
+  queen:
+    # Overrides the prod command; nodemon doit être installé dans l'image
+    # ou utiliser `node --watch` (Node >= 18)
+    command: node --watch src/queen_oss.js
+    volumes:
+      - ./apps/queen/src:/app/src:ro
+      - ./apps/queen/package.json:/app/package.json:ro
+    environment:
+      - NODE_ENV=development
+
+  # ─── Dashboard Next.js — next dev ────────────────────────────────────────
+
+  dashboard:
+    command: pnpm dev
+    volumes:
+      - ./apps/dashboard/src:/app/src:ro
+      - ./apps/dashboard/public:/app/public:ro
+    environment:
+      - NODE_ENV=development
+      # En dev on pointe vers l'hôte local (queen tourne en Docker)
+      - NEXT_PUBLIC_API_URL=http://localhost:3000
+      - NEXT_PUBLIC_WS_URL=ws://localhost:3000
+      - NEXT_PUBLIC_DASHBOARD_WS_URL=ws://localhost:9001
+
+  # ─── Gateway ─────────────────────────────────────────────────────────────
+
+  gateway:
+    volumes:
+      - ./apps/gateway/src:/app/src:ro
+    environment:
+      - NODE_ENV=development

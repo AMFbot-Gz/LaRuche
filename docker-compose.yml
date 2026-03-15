@@ -1,0 +1,337 @@
+# =============================================================================
+# Project Chimera — docker-compose.yml (Production)
+# =============================================================================
+# Usage :
+#   Profil minimal (queen + brain + evolution + dashboard) :
+#     docker compose --profile minimal up -d
+#
+#   Profil complet (tous les services) :
+#     docker compose --profile full up -d
+#
+#   Ou via le script helper :
+#     ./scripts/start.sh [minimal|full]
+#
+# Variables d'env : copiez .env.example → .env et remplissez les valeurs.
+# =============================================================================
+
+x-python-agent: &python-agent
+  build:
+    context: .
+    dockerfile: infra/docker/Dockerfile.agent
+  env_file: .env
+  environment:
+    # URLs internes Docker (overrides les valeurs localhost du .env)
+    - AGENT_ORCHESTRATION_URL=http://agent-orchestration:8001
+    - AGENT_PERCEPTION_URL=http://agent-perception:8002
+    - AGENT_BRAIN_URL=http://agent-brain:8003
+    - AGENT_EXECUTOR_URL=http://agent-executor:8004
+    - AGENT_EVOLUTION_URL=http://agent-evolution:8005
+    - AGENT_MEMORY_URL=http://agent-memory:8006
+    - AGENT_MCP_BRIDGE_URL=http://agent-mcp-bridge:8007
+    - CHROMADB_HOST=chromadb
+    - CHROMADB_PORT=8000
+    - OLLAMA_HOST=http://ollama:11434
+  networks:
+    - chimera-network
+  restart: unless-stopped
+
+networks:
+  chimera-network:
+    driver: bridge
+    name: chimera-network
+
+volumes:
+  chromadb-data:
+    name: chimera-chromadb-data
+  vault-data:
+    name: chimera-vault-data
+  ollama-data:
+    name: chimera-ollama-data
+  redis-data:
+    name: chimera-redis-data
+
+services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Infrastructure
+  # ─────────────────────────────────────────────────────────────────────────
+
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8200:8000"
+    volumes:
+      - chromadb-data:/chroma/chroma
+    networks:
+      - chimera-network
+    restart: unless-stopped
+    profiles: ["full", "minimal"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - chimera-network
+    restart: unless-stopped
+    profiles: ["full"]
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    networks:
+      - chimera-network
+    restart: unless-stopped
+    profiles: ["full"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 15s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Agents Python
+  # ─────────────────────────────────────────────────────────────────────────
+
+  agent-orchestration:
+    <<: *python-agent
+    container_name: chimera-orchestration
+    command: uvicorn agents.orchestration.orchestration_agent:app --host 0.0.0.0 --port 8001
+    ports:
+      - "${AGENT_ORCHESTRATION_PORT:-8001}:8001"
+    profiles: ["full"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent-perception:
+    <<: *python-agent
+    container_name: chimera-perception
+    command: uvicorn agents.perception.perception_agent:app --host 0.0.0.0 --port 8002
+    ports:
+      - "${AGENT_PERCEPTION_PORT:-8002}:8002"
+    profiles: ["full"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent-brain:
+    <<: *python-agent
+    container_name: chimera-brain
+    command: uvicorn agents.brain.brain:app --host 0.0.0.0 --port 8003
+    ports:
+      - "${AGENT_BRAIN_PORT:-8003}:8003"
+    profiles: ["full", "minimal"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent-executor:
+    <<: *python-agent
+    container_name: chimera-executor
+    command: uvicorn agents.executor.executor_agent:app --host 0.0.0.0 --port 8004
+    ports:
+      - "${AGENT_EXECUTOR_PORT:-8004}:8004"
+    profiles: ["full"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent-evolution:
+    <<: *python-agent
+    container_name: chimera-evolution
+    command: uvicorn agents.evolution.auto_coder_bee:app --host 0.0.0.0 --port 8005
+    ports:
+      - "${AGENT_EVOLUTION_PORT:-8005}:8005"
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_REPO=${GITHUB_REPO:-AMFbot-Gz/chimera}
+    profiles: ["full", "minimal"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8005/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent-memory:
+    <<: *python-agent
+    container_name: chimera-memory
+    command: uvicorn agents.memory.memory_agent:app --host 0.0.0.0 --port 8006
+    ports:
+      - "${AGENT_MEMORY_PORT:-8006}:8006"
+    volumes:
+      - chromadb-data:/data/vector_store
+      - vault-data:/data/vault
+    depends_on:
+      chromadb:
+        condition: service_healthy
+    profiles: ["full"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8006/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent-mcp-bridge:
+    <<: *python-agent
+    container_name: chimera-mcp-bridge
+    # Lancé depuis son propre répertoire car "mcp-bridge" contient un tiret (invalide en dotted-path Python)
+    working_dir: /app/agents/mcp-bridge
+    command: uvicorn mcp_bridge_agent:app --host 0.0.0.0 --port 8007
+    ports:
+      - "${AGENT_MCP_BRIDGE_PORT:-8007}:8007"
+    profiles: ["full"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8007/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  agent-voice:
+    <<: *python-agent
+    container_name: chimera-voice
+    command: uvicorn agents.voice.voice_agent:app --host 0.0.0.0 --port 8010
+    ports:
+      - "8010:8010"
+    profiles: ["full"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Queen Node.js
+  # ─────────────────────────────────────────────────────────────────────────
+
+  queen:
+    build:
+      context: apps/queen
+      dockerfile: Dockerfile
+    container_name: chimera-queen
+    ports:
+      - "${QUEEN_PORT:-3000}:3000"
+      - "${HUD_PORT:-9001}:9001"
+    env_file: .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - AGENT_ORCHESTRATION_URL=http://agent-orchestration:8001
+      - AGENT_PERCEPTION_URL=http://agent-perception:8002
+      - AGENT_BRAIN_URL=http://agent-brain:8003
+      - AGENT_EXECUTOR_URL=http://agent-executor:8004
+      - AGENT_EVOLUTION_URL=http://agent-evolution:8005
+      - AGENT_MEMORY_URL=http://agent-memory:8006
+      - AGENT_MCP_BRIDGE_URL=http://agent-mcp-bridge:8007
+      - OLLAMA_HOST=http://ollama:11434
+    networks:
+      - chimera-network
+    restart: unless-stopped
+    profiles: ["full", "minimal"]
+    depends_on:
+      agent-brain:
+        condition: service_healthy
+      agent-evolution:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Dashboard Next.js
+  # ─────────────────────────────────────────────────────────────────────────
+
+  dashboard:
+    build:
+      context: apps/dashboard
+      dockerfile: Dockerfile
+    container_name: chimera-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-3001}:3000"
+    env_file: .env
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXT_PUBLIC_API_URL=http://queen:3000
+      - NEXT_PUBLIC_WS_URL=ws://queen:3000
+      - NEXT_PUBLIC_DASHBOARD_WS_URL=ws://queen:9001
+    networks:
+      - chimera-network
+    restart: unless-stopped
+    profiles: ["full", "minimal"]
+    depends_on:
+      queen:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Gateway multi-canaux (Telegram / Discord / Slack)
+  # ─────────────────────────────────────────────────────────────────────────
+
+  gateway:
+    build:
+      context: apps/gateway
+      dockerfile: Dockerfile
+    container_name: chimera-gateway
+    ports:
+      - "${GATEWAY_PORT:-8100}:8100"
+    env_file: .env
+    environment:
+      - QUEEN_URL=http://queen:3000
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - chimera-network
+    restart: unless-stopped
+    profiles: ["full"]
+    depends_on:
+      queen:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8100/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
