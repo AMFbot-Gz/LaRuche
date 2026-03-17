@@ -72,6 +72,9 @@ export function startStandaloneServer(deps) {
   // ─── Webhooks N8N ────────────────────────────────────────────────────────────
   setupWebhooks(app);
 
+  // ─── Health alias (/health → /api/health pour compatibilité monitoring externe)
+  app.get("/health", (c) => c.json({ ok: true, status: "online", service: "laruche-queen" }));
+
   // ─── Route racine ───────────────────────────────────────────────────────────
   app.get("/", (c) =>
     c.json({

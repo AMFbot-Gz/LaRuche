@@ -8,7 +8,8 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(__dirname, '../..');
+// ROOT = projet racine (la-ruche/) pour trouver skills/, workspace/skills/, .laruche/skills/
+const ROOT = join(__dirname, '../../../..');
 
 // ─── Builtins (priorité 4 — fallback) ─────────────────────────────────────────────────
 const BUILTIN_SKILLS = [

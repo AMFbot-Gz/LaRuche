@@ -458,6 +458,7 @@ async function runTextMission(command, missionId) {
     const duration = Date.now() - t0;
 
     hudFn({ type: "mission_complete", duration });
+    saveMission({ id: missionId, command, status: "success", duration, models: [res.model], result: text, ts: new Date().toISOString() });
     if (missionId) updateMission(missionId, {
       status: "success",
       result: text,
@@ -465,10 +466,28 @@ async function runTextMission(command, missionId) {
       models: [res.model],
       completedAt: new Date().toISOString(),
     });
+
+    // Mémoire épisodique locale (JSONL)
+    import('../memory/episodic/index.js').then(({ storeEpisode }) => {
+      storeEpisode({ mission: command, actions: [], outcome: 'success', rewardScore: 1.0, lessons: [] });
+    }).catch(() => {});
+
+    // Mémoire vectorielle ChromaDB (agent :8006) — async, non bloquant
+    fetch(`http://localhost:${process.env.AGENT_MEMORY_PORT || 8006}/memories`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task: command.slice(0, 300), result: { success: true, response: text.slice(0, 500) }, success: true }),
+      signal: AbortSignal.timeout(3000),
+    }).catch(() => {});
+
     return text;
   } catch (err) {
     logger.warn(`[TextMission] Erreur: ${err.message}`);
-    if (missionId) updateMission(missionId, { status: "error", error: err.message });
+    saveMission({ id: missionId, command, status: "error", error: err.message, ts: new Date().toISOString() });
+    if (missionId) updateMission(missionId, { status: "error", error: err.message, completedAt: new Date().toISOString() });
+    import('../memory/episodic/index.js').then(({ storeEpisode }) => {
+      storeEpisode({ mission: command, actions: [], outcome: 'error', rewardScore: 0.0, lessons: [] });
+    }).catch(() => {});
     return `Erreur: ${err.message}`;
   }
 }
@@ -538,12 +557,12 @@ async function runComputerUseMission(command, missionId) {
       // Mémoire épisodique — enregistre l'expérience de la mission
       import('../memory/episodic/index.js').then(({ storeEpisode }) => {
         storeEpisode({ mission: command, actions: [], outcome: 'success', rewardScore: 1.0, lessons: [] });
-      // FIX 1 — Log silencieux conditionnel (module optionnel)
-      }).catch((err) => {
-        if (process.env.LOG_LEVEL === 'debug') {
-          console.warn('[Queen] silent error:', err.message);
-        }
-      });
+      }).catch(() => {});
+      fetch(`http://localhost:${process.env.AGENT_MEMORY_PORT || 8006}/memories`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task: command.slice(0, 300), result: { success: true, response: summary.slice(0, 500) }, success: true }),
+        signal: AbortSignal.timeout(3000),
+      }).catch(() => {});
       return summary;
     }
 

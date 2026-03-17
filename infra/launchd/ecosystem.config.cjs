@@ -58,6 +58,8 @@ module.exports = {
       watch: false,
       autorestart: true,
       restart_delay: 3000,
+      // Libère le port 3000 avant démarrage pour éviter EADDRINUSE
+      kill_timeout: 5000,
       max_memory_restart: MODE === "high" ? "1G" : MODE === "low" ? "200M" : "500M",
       env: {
         NODE_ENV: "production",

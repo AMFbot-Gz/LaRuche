@@ -47,12 +47,13 @@ function parseJobsYaml(yamlStr) {
     const trimmed = line.trim();
     if (trimmed.startsWith("#") || !trimmed) continue;
 
-    if (trimmed.startsWith("- id:")) {
+    if (trimmed.startsWith("- id:") || trimmed.startsWith("- name:")) {
       if (current) {
         current.action = actionLines.join("\n").trim();
         if (current.enabled !== false) jobs.push(current);
       }
-      current = { id: trimmed.split(":")[1].trim(), action: "" };
+      const keyVal = trimmed.replace(/^-\s+\w+:\s*/, "");
+      current = { id: keyVal.trim(), action: "" };
       actionLines = [];
       inAction = false;
     } else if (current) {
@@ -97,17 +98,33 @@ async function alertTelegram(message) {
 // ─── Exécution d'un job ────────────────────────────────────────────────────────
 
 async function executeJob(job) {
-  logger.info(`Exécution job: ${job.id} (${job.name || "sans nom"})`);
+  logger.info(`Exécution job: ${job.id}`);
   const startTime = Date.now();
 
   try {
-    // Détecter si c'est une intention computer-use ou un script
-    const action = job.action || "";
-    const isIntent = /ouvre|lance|mets|cherche|clique|tape|open|search/i.test(action);
+    const actionType = job.action || "";
 
+    // Cas 1 : action: mission → envoyer au runMission de la Queen
+    if (actionType === "mission" && job.mission) {
+      const { runIntentPipeline } = await import("./agents/intentPipeline.js");
+      const { ask } = await import("./model_router.js");
+      const res = await ask(job.mission, { role: "worker", temperature: 0.4, timeout: 120000 });
+      logger.info(`Job ${job.id} mission terminée: ${res.text?.slice(0, 100)}`);
+      return;
+    }
+
+    // Cas 2 : action: http → ping HTTP
+    if (actionType === "http" && job.url) {
+      const res = await fetch(job.url, { signal: AbortSignal.timeout(5000) });
+      logger.info(`Job ${job.id} http: ${res.status} ${job.url}`);
+      return;
+    }
+
+    // Cas 3 : intention computer-use (ouvre, lance, etc.)
+    const isIntent = /ouvre|lance|mets|cherche|clique|tape|open|search/i.test(actionType);
     if (isIntent) {
       const { runIntentPipeline } = await import("./agents/intentPipeline.js");
-      const result = await runIntentPipeline(action, {
+      const result = await runIntentPipeline(actionType, {
         hudFn: (e) => logger.info(`HUD: ${JSON.stringify(e)}`),
       });
       const msg = `✅ Job *${job.id}*: ${result.goal} (${(result.duration / 1000).toFixed(1)}s)`;
@@ -153,9 +170,9 @@ async function executeJob(job) {
 // ─── Chargement et planification ───────────────────────────────────────────────
 
 export function startCronRunner() {
-  const jobsPath = join(ROOT, "workspace/cron/jobs.yml");
+  const jobsPath = join(ROOT, "data/cron/jobs.yml");
   if (!existsSync(jobsPath)) {
-    logger.info("Aucun fichier workspace/cron/jobs.yml — cron désactivé");
+    logger.info("Aucun fichier data/cron/jobs.yml — cron désactivé");
     return;
   }
 
@@ -170,12 +187,13 @@ export function startCronRunner() {
   logger.info(`${jobs.length} job(s) planifié(s)`);
 
   for (const job of jobs) {
-    if (!job.schedule || !cron.validate(job.schedule)) {
-      logger.warn(`Job ${job.id}: schedule invalide "${job.schedule}"`);
+    const schedule = job.schedule || job.cron;
+    if (!schedule || !cron.validate(schedule)) {
+      logger.warn(`Job ${job.id}: schedule invalide "${schedule}"`);
       continue;
     }
 
-    cron.schedule(job.schedule, () => executeJob(job), { timezone: "Europe/Paris" });
-    logger.info(`  ✓ ${job.id}: ${job.schedule} — ${job.name || job.action?.slice(0, 50)}`);
+    cron.schedule(schedule, () => executeJob(job), { timezone: "Europe/Paris" });
+    logger.info(`  ✓ ${job.id}: ${schedule} — ${job.action?.slice(0, 50) || job.mission?.slice(0, 50)}`);
   }
 }

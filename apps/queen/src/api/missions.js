@@ -768,21 +768,46 @@ export function createMissionsRoutes(app, deps) {
     const { getSchedule, nextMission } = await import('../temporal/index.js');
     return c.json({ schedule: getSchedule(), next: nextMission() });
   });
+  // ─── /api/goals — proxy vers goals-agent :8010 (source de vérité SQLite) ────
+  const GOALS_URL = `http://localhost:${process.env.AGENT_GOALS_PORT || 8010}`;
   app.get('/api/goals', async (c) => {
-    const { getAllGoals } = await import('../temporal/index.js');
-    return c.json({ goals: getAllGoals() });
+    try {
+      const res = await fetch(`${GOALS_URL}/goals`, { signal: AbortSignal.timeout(3000) });
+      return c.json(await res.json(), res.status);
+    } catch {
+      const { getAllGoals } = await import('../temporal/index.js');
+      return c.json({ goals: getAllGoals(), _source: 'local_fallback' });
+    }
   });
   app.post('/api/goals', async (c) => {
     let body; try { body = await c.req.json(); } catch { return c.json({ error: 'Body invalide' }, 400); }
     if (!body?.description) return c.json({ error: 'Champ description requis' }, 400);
-    const { addGoal } = await import('../temporal/index.js');
-    return c.json(addGoal(body), 201);
+    try {
+      const res = await fetch(`${GOALS_URL}/goals`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(3000),
+      });
+      return c.json(await res.json(), res.status);
+    } catch {
+      const { addGoal } = await import('../temporal/index.js');
+      return c.json(addGoal(body), 201);
+    }
   });
   app.delete('/api/goals/:id', async (c) => {
-    const { deleteGoal } = await import('../temporal/index.js');
-    const ok = deleteGoal(c.req.param('id'));
-    if (!ok) return c.json({ error: 'But introuvable' }, 404);
-    return c.json({ success: true });
+    try {
+      const res = await fetch(`${GOALS_URL}/goals/${c.req.param('id')}`, {
+        method: 'DELETE',
+        signal: AbortSignal.timeout(3000),
+      });
+      return c.json(await res.json(), res.status);
+    } catch {
+      const { deleteGoal } = await import('../temporal/index.js');
+      const ok = deleteGoal(c.req.param('id'));
+      if (!ok) return c.json({ error: 'But introuvable' }, 404);
+      return c.json({ success: true });
+    }
   });
 
   // ─── PATCH /api/goals/:id/status ─────────────────────────────────────────────

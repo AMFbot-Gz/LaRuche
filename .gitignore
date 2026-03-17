@@ -46,3 +46,6 @@ patcheck.tmp
 .laruche/.initialized
 .env.auto
 agents/memory/vector_store/
+apps/queen/.laruche/missions.json
+apps/queen/data/learned_routes.json
+apps/queen/data/mission_log.jsonl

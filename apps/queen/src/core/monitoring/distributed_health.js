@@ -12,6 +12,8 @@ const LAYERS = [
   { name: 'MCP Bridge',    url: `http://localhost:${process.env.AGENT_MCP_BRIDGE_PORT    || 8007}/health`, service: SERVICES.MCP_BRIDGE   },
   { name: 'Discovery',     url: `http://localhost:${process.env.AGENT_DISCOVERY_PORT     || 8008}/health`, service: SERVICES.DISCOVERY    },
   { name: 'Knowledge',     url: `http://localhost:${process.env.AGENT_KNOWLEDGE_PORT     || 8009}/health`, service: SERVICES.KNOWLEDGE    },
+  { name: 'Goals',         url: `http://localhost:${process.env.AGENT_GOALS_PORT         || 8010}/health`, service: SERVICES.GOALS        },
+  { name: 'Voice',         url: `http://localhost:${process.env.AGENT_VOICE_PORT         || 8011}/health`, service: SERVICES.VOICE         },
 ];
 
 const BASE_INTERVAL = 15000;   // 15s en nominal

@@ -35,6 +35,8 @@ const PORTS = {
   MCP_BRIDGE:    parseInt(process.env.AGENT_MCP_BRIDGE_PORT)    || 8007,
   DISCOVERY:     parseInt(process.env.AGENT_DISCOVERY_PORT)     || 8008,
   KNOWLEDGE:     parseInt(process.env.AGENT_KNOWLEDGE_PORT)     || 8009,
+  GOALS:         parseInt(process.env.AGENT_GOALS_PORT)         || 8010,
+  VOICE:         parseInt(process.env.AGENT_VOICE_PORT)         || 8011,
 };
 
 export const SERVICES = {
@@ -47,6 +49,8 @@ export const SERVICES = {
   MCP_BRIDGE:   `McpBridge:${PORTS.MCP_BRIDGE}`,
   DISCOVERY:    `Discovery:${PORTS.DISCOVERY}`,
   KNOWLEDGE:    `Knowledge:${PORTS.KNOWLEDGE}`,
+  GOALS:        `Goals:${PORTS.GOALS}`,
+  VOICE:        `Voice:${PORTS.VOICE}`,
 };
 
 // Config par service (timeouts adaptés à la charge de chaque agent)
@@ -60,6 +64,8 @@ const SERVICE_CONFIG = {
   [SERVICES.MCP_BRIDGE]:   { baseUrl: `http://localhost:${PORTS.MCP_BRIDGE}`,    callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
   [SERVICES.DISCOVERY]:    { baseUrl: `http://localhost:${PORTS.DISCOVERY}`,     callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
   [SERVICES.KNOWLEDGE]:    { baseUrl: `http://localhost:${PORTS.KNOWLEDGE}`,     callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.GOALS]:        { baseUrl: `http://localhost:${PORTS.GOALS}`,         callTimeoutMs: 5_000,  failureThreshold: 3, resetTimeoutMs: 30_000 },
+  [SERVICES.VOICE]:        { baseUrl: `http://localhost:${PORTS.VOICE}`,         callTimeoutMs: 10_000, failureThreshold: 3, resetTimeoutMs: 30_000 },
 };
 
 // ─── Fonction principale ───────────────────────────────────────────────────────
