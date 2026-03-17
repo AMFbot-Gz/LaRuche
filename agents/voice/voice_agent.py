@@ -1,230 +1,177 @@
 """
-voice_agent.py — FastAPI app pour le Voice Agent (:8010)
+voice_agent.py — Pipeline voix La Ruche (:8011)
 
-Le Voice Agent est les oreilles et la voix de Chimera. Il :
-  1. Transcrit de l'audio (base64) en texte via faster-whisper (STT)
-  2. Synthétise du texte en audio via piper ou macOS say (TTS)
-  3. Démarre une session d'écoute microphone et transcrit en temps réel
+Flux complet :
+  Micro → Whisper (STT local) → Texte → Queen (/inbound) → Réponse → TTS (macOS say)
 
 Endpoints :
-  GET  /health      — liveness check (HealthMonitor Queen)
-  GET  /status      — capacités détaillées (backends STT/TTS, micro dispo)
-  POST /transcribe  — audio base64 → texte (faster-whisper)
-  POST /synthesize  — texte → audio base64 (piper ou macOS say)
-  POST /listen      — démarrage d'une session microphone → texte
-
-Lancement :
-  uvicorn agents.voice.voice_agent:app --port 8010 --reload
-
-Architecture :
-  - Dégradation gracieuse : chaque endpoint reste fonctionnel même sans les dépendances optionnelles
-  - Pas d'état global : chaque requête est indépendante
-  - Compatible Queen HealthMonitor (format /health standard Chimera)
+  GET  /health
+  POST /listen    — enregistre 5s depuis le micro et transcrit
+  POST /transcribe — transcrit un fichier audio (WAV/MP3) uploadé
+  POST /speak     — TTS: lit le texte à voix haute (macOS say)
+  POST /voice-command — listen + transcribe + send to Queen + speak response
 """
-
 from __future__ import annotations
+import asyncio, os, subprocess, tempfile, uuid
+from pathlib import Path
+from fastapi import FastAPI, HTTPException, UploadFile, File
+from pydantic import BaseModel
+import httpx
 
-import base64
-import time
-from datetime import datetime, timezone
+app = FastAPI(title="Voice Agent", version="1.0.0")
+QUEEN_URL = os.environ.get("QUEEN_URL", "http://localhost:3000")
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
 
-from fastapi import FastAPI, HTTPException
+# ─── Modèles Pydantic ─────────────────────────────────────────────────────────
 
-from agents.voice.schemas.voice_schemas import (
-    ListenRequest,
-    ListenResponse,
-    StatusResponse,
-    SynthesizeRequest,
-    SynthesizeResponse,
-    TranscribeRequest,
-    TranscribeResponse,
-)
-from agents.voice.services import stt_service, tts_service
-from agents.voice.services.microphone_service import (
-    is_microphone_available,
-    record_audio,
-)
+class SpeakRequest(BaseModel):
+    text: str
+    voice: str = "Amelie"   # voix macOS française
+    speed: int = 180
 
-# ─── App ──────────────────────────────────────────────────────────────────────
+class ListenRequest(BaseModel):
+    duration_seconds: int = 5
+    language: str = "fr"
 
-app = FastAPI(
-    title="Chimera Voice Agent",
-    description="Les oreilles et la voix de Chimera — STT, TTS et écoute microphone",
-    version="1.0.0",
-)
+# ─── Utilitaires ──────────────────────────────────────────────────────────────
 
+async def transcribe_audio(audio_path: str, language: str = "fr") -> str:
+    """Transcrit un fichier audio avec Whisper (via ollama ou mlx-whisper)."""
+    # Essai 1: mlx-whisper (optimisé Apple Silicon M2)
+    try:
+        result = subprocess.run(
+            ["mlx_whisper", audio_path, "--model", "mlx-community/whisper-large-v3-turbo", "--language", language],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
 
-# ─── /health ──────────────────────────────────────────────────────────────────
+    # Essai 2: whisper CLI classique
+    try:
+        result = subprocess.run(
+            ["whisper", audio_path, "--language", language, "--model", "base", "--output_format", "txt"],
+            capture_output=True, text=True, timeout=60, cwd=tempfile.gettempdir()
+        )
+        txt_path = Path(audio_path).with_suffix(".txt")
+        if txt_path.exists():
+            text = txt_path.read_text().strip()
+            txt_path.unlink(missing_ok=True)
+            return text
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
 
+    # Essai 3: faster-whisper Python
+    try:
+        from faster_whisper import WhisperModel
+        model = WhisperModel("base", device="auto", compute_type="int8")
+        segments, _ = model.transcribe(audio_path, language=language)
+        return " ".join(s.text for s in segments).strip()
+    except ImportError:
+        pass
+
+    raise HTTPException(status_code=503, detail="Whisper non disponible. Installe mlx-whisper: pip install mlx-whisper")
+
+async def record_audio(duration: int = 5) -> str:
+    """Enregistre depuis le micro (macOS sox ou afrecord)."""
+    path = f"/tmp/ruche_voice_{uuid.uuid4().hex}.wav"
+
+    # Essai 1: sox (brew install sox)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "sox", "-d", "-r", "16000", "-c", "1", path, "trim", "0", str(duration),
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
+        await asyncio.wait_for(proc.wait(), timeout=duration + 5)
+        return path
+    except (FileNotFoundError, asyncio.TimeoutError):
+        pass
+
+    # Essai 2: afrecord (macOS natif)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "afrecord", "-f", "WAVE", "-d", str(duration), path,
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
+        await asyncio.wait_for(proc.wait(), timeout=duration + 5)
+        return path
+    except (FileNotFoundError, asyncio.TimeoutError):
+        pass
+
+    raise HTTPException(status_code=503, detail="Enregistrement audio non disponible. Installe sox: brew install sox")
+
+async def speak(text: str, voice: str = "Amelie", speed: int = 180):
+    """TTS via macOS say."""
+    proc = await asyncio.create_subprocess_exec(
+        "say", "-v", voice, "-r", str(speed), text,
+        stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+    )
+    await proc.wait()
+
+# ─── Routes ───────────────────────────────────────────────────────────────────
 
 @app.get("/health")
-async def health():
-    """Liveness check — format stable pour Queen HealthMonitor."""
-    return {
-        "status":          "ok",
-        "service":         "voice",
-        "timestamp":       datetime.now(timezone.utc).isoformat(),
-        "stt_backend":     stt_service.get_stt_backend(),
-        "tts_backend":     tts_service.get_tts_backend(),
-        "whisper_available": stt_service.is_whisper_available(),
-    }
+def health():
+    return {"status": "ok", "agent": "voice", "port": 8011}
 
+@app.post("/speak")
+async def speak_endpoint(req: SpeakRequest):
+    await speak(req.text, req.voice, req.speed)
+    return {"spoken": req.text}
 
-# ─── /status ──────────────────────────────────────────────────────────────────
-
-
-@app.get("/status", response_model=StatusResponse)
-async def status() -> StatusResponse:
-    """Capacités détaillées de l'agent (backends actifs, micro, modèles disponibles)."""
-    return StatusResponse(
-        service=             "voice",
-        whisper_available=   stt_service.is_whisper_available(),
-        whisper_version=     stt_service.get_whisper_version(),
-        piper_available=     tts_service.is_piper_available(),
-        microphone_available= is_microphone_available(),
-        tts_backend=         tts_service.get_tts_backend(),
-        stt_backend=         stt_service.get_stt_backend(),
-        supported_models=    stt_service.get_supported_models(),
-    )
-
-
-# ─── /transcribe ──────────────────────────────────────────────────────────────
-
-
-@app.post("/transcribe", response_model=TranscribeResponse)
-async def transcribe(req: TranscribeRequest) -> TranscribeResponse:
-    """
-    Transcrit un fichier audio encodé en base64 en texte.
-
-    - audio_base64 : contenu audio brut encodé en base64 (WAV, MP3, OGG, FLAC…)
-    - language     : code ISO 639-1 ('fr', 'en'…). None = détection automatique.
-    - model        : modèle Whisper (tiny/base/small/medium/large-v2/large-v3)
-    - beam_size    : qualité du beam search (5 = équilibre vitesse/précision)
-
-    Sans faster-whisper : retourne text="" et whisper_available=False (pas de 503).
-    L'agent ne crashe jamais — il dégrade gracieusement.
-
-    Lève 400 si le base64 fourni est invalide.
-    """
-    t0 = time.monotonic()
-
-    # Décodage base64 (validate=True rejette les caractères non-base64)
+@app.post("/transcribe")
+async def transcribe_endpoint(file: UploadFile = File(...), language: str = "fr"):
+    path = f"/tmp/ruche_upload_{uuid.uuid4().hex}.wav"
+    content = await file.read()
+    Path(path).write_bytes(content)
     try:
-        audio_bytes = base64.b64decode(req.audio_base64, validate=True)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"audio_base64 invalide : {exc}")
+        text = await transcribe_audio(path, language)
+        return {"text": text, "language": language}
+    finally:
+        Path(path).unlink(missing_ok=True)
 
-    # Transcription STT
-    result = await stt_service.transcribe_audio(
-        audio_bytes=audio_bytes,
-        language=req.language,
-        model_name=req.model,
-        beam_size=req.beam_size,
-    )
+@app.post("/listen")
+async def listen_endpoint(req: ListenRequest):
+    """Enregistre depuis le micro et transcrit."""
+    audio_path = await record_audio(req.duration_seconds)
+    try:
+        text = await transcribe_audio(audio_path, req.language)
+        return {"text": text, "duration": req.duration_seconds}
+    finally:
+        Path(audio_path).unlink(missing_ok=True)
 
-    duration_ms = int((time.monotonic() - t0) * 1000)
-
-    return TranscribeResponse(
-        text=                 result["text"],
-        language=             result["language"],
-        language_probability= result["language_probability"],
-        duration_ms=          duration_ms,
-        stt_backend=          result["stt_backend"],
-        whisper_available=    result["whisper_available"],
-    )
-
-
-# ─── /synthesize ──────────────────────────────────────────────────────────────
-
-
-@app.post("/synthesize", response_model=SynthesizeResponse)
-async def synthesize(req: SynthesizeRequest) -> SynthesizeResponse:
-    """
-    Synthétise du texte en audio et retourne le résultat encodé en base64.
-
-    - text   : texte à synthétiser (max 4096 caractères)
-    - voice  : nom de voix (ex: 'Amelie' pour macOS say). None = voix système.
-    - format : format de sortie audio ('aiff' ou 'wav')
-
-    Backend utilisé (par ordre de priorité) :
-      1. piper-tts (si installé)
-      2. macOS say (toujours disponible sur Mac)
-
-    Lève 503 si aucun backend TTS n'est disponible.
-    """
-    t0 = time.monotonic()
+@app.post("/voice-command")
+async def voice_command(req: ListenRequest):
+    """Pipeline complet: écoute → transcrit → envoie à Queen → lit la réponse."""
+    # 1. Écoute
+    audio_path = await record_audio(req.duration_seconds)
 
     try:
-        audio_bytes = await tts_service.synthesize(
-            text=req.text,
-            voice=req.voice,
-            fmt=req.format,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        # 2. Transcription
+        user_text = await transcribe_audio(audio_path, req.language)
+        if not user_text:
+            return {"error": "Rien compris"}
 
-    duration_ms = int((time.monotonic() - t0) * 1000)
+        # 3. Envoyer à Queen
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                f"{QUEEN_URL}/api/chat",
+                json={"message": user_text, "source": "voice"},
+            )
+            response_data = resp.json()
+            response_text = response_data.get("response") or response_data.get("message") or "Je n'ai pas de réponse."
 
-    return SynthesizeResponse(
-        audio_base64= base64.b64encode(audio_bytes).decode(),
-        format=       req.format,
-        text_length=  len(req.text),
-        duration_ms=  duration_ms,
-        tts_backend=  tts_service.get_tts_backend(),
-    )
+        # 4. TTS: lire la réponse
+        await speak(response_text)
 
-
-# ─── /listen ──────────────────────────────────────────────────────────────────
-
-
-@app.post("/listen", response_model=ListenResponse)
-async def listen(req: ListenRequest) -> ListenResponse:
-    """
-    Démarre une session d'écoute microphone et transcrit ce qui a été dit.
-
-    - duration_seconds : durée max d'enregistrement (0.5 - 60 secondes)
-    - language         : langue cible. None = détection automatique.
-    - sample_rate      : fréquence Hz (16000 recommandé pour Whisper)
-
-    Lève 503 si le microphone est inaccessible (pas de hardware, pas de permission).
-    Si faster-whisper n'est pas disponible, retourne text="" avec whisper_available=False.
-    """
-    t0 = time.monotonic()
-
-    # Enregistrement microphone
-    try:
-        audio_bytes, audio_duration = await record_audio(
-            duration_seconds=req.duration_seconds,
-            sample_rate=req.sample_rate,
-        )
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
-
-    # Transcription du micro
-    result = await stt_service.transcribe_audio(
-        audio_bytes=audio_bytes,
-        language=req.language,
-    )
-
-    duration_ms = int((time.monotonic() - t0) * 1000)
-
-    return ListenResponse(
-        text=                   result["text"],
-        language=               result["language"],
-        audio_duration_seconds= audio_duration,
-        duration_ms=            duration_ms,
-        microphone_available=   True,
-        stt_backend=            result["stt_backend"],
-    )
-
-
-# ─── Lancement direct ─────────────────────────────────────────────────────────
+        return {
+            "heard": user_text,
+            "response": response_text
+        }
+    finally:
+        Path(audio_path).unlink(missing_ok=True)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "agents.voice.voice_agent:app",
-        host="0.0.0.0",
-        port=8010,
-        reload=True,
-    )
+    uvicorn.run(app, host="0.0.0.0", port=8011)

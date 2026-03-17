@@ -29,7 +29,7 @@ setup: ## Premier lancement : install + copie .env + doctor
 	@echo "✅ Setup terminé ! Démarrez avec : make dev"
 	@echo "   Queen:     http://localhost:3000"
 	@echo "   Dashboard: http://localhost:3001"
-	@echo "   Agents:    http://localhost:8001-8010"
+	@echo "   Agents:    http://localhost:8001-8011"
 
 doctor: ## Vérifie les prérequis (node, pnpm, python3, uv, ollama)
 	@echo "=== Chimera Doctor ==="
@@ -76,7 +76,7 @@ dev: ## Lance tout en mode développement (Node.js + Python agents)
 	@echo "🚀 Démarrage Chimera en mode DEV..."
 	$(PNPM) turbo run dev --parallel &
 	$(MAKE) agents-up
-	@echo "✅ Chimera running — Queen :3000 · Dashboard :3001 · Agents :8001-8010"
+	@echo "✅ Chimera running — Queen :3000 · Dashboard :3001 · Agents :8001-8011"
 
 queen: ## Lance seulement la Queen Node.js
 	cd apps/queen && node src/queen_oss.js
@@ -84,9 +84,9 @@ queen: ## Lance seulement la Queen Node.js
 dashboard: ## Lance seulement le dashboard
 	cd apps/dashboard && $(PNPM) dev
 
-agents: agents-up ## Alias → agents-up (lance les 9 agents Python en background)
+agents: agents-up ## Alias → agents-up (lance les 11 agents Python en background)
 
-agents-up: ## Lance les 10 agents Python (avec PIDs dans /tmp/chimera_agents.pids)
+agents-up: ## Lance les 11 agents Python (avec PIDs dans /tmp/chimera_agents.pids)
 	@echo "🐝 Démarrage des agents Python..."
 	@mkdir -p $(AGENT_LOG_DIR)
 	@rm -f $(AGENT_PID_FILE)
@@ -151,7 +151,13 @@ agents-up: ## Lance les 10 agents Python (avec PIDs dans /tmp/chimera_agents.pid
 			>$(AGENT_LOG_DIR)/goals.log 2>&1 & \
 		echo "$$! goals" >> $(AGENT_PID_FILE); \
 		echo "  ✓ goals           :$$PORT (PID $$!)"
-	@echo "✅ 10 agents Python démarrés — PIDs dans $(AGENT_PID_FILE)"
+	@PORT=$${AGENT_VOICE_PORT:-8011}; \
+		$(UV) run uvicorn agents.voice.voice_agent:app \
+			--host 0.0.0.0 --port $$PORT \
+			>$(AGENT_LOG_DIR)/voice.log 2>&1 & \
+		echo "$$! voice" >> $(AGENT_PID_FILE); \
+		echo "  ✓ voice           :$$PORT (PID $$!)"
+	@echo "✅ 11 agents Python démarrés — PIDs dans $(AGENT_PID_FILE)"
 	@echo "   Logs : $(AGENT_LOG_DIR)/"
 
 stop-agents: agents-down ## Alias → agents-down (arrête les agents Python)
@@ -192,7 +198,8 @@ agents-status: ## Vérifie l'état de santé de chaque agent Python
 	check_agent mcp-bridge    $${AGENT_MCP_BRIDGE_PORT:-8007}; \
 	check_agent discovery     $${AGENT_DISCOVERY_PORT:-8008}; \
 	check_agent knowledge     $${AGENT_KNOWLEDGE_PORT:-8009}; \
-	check_agent goals         $${AGENT_GOALS_PORT:-8010}
+	check_agent goals         $${AGENT_GOALS_PORT:-8010}; \
+	check_agent voice         $${AGENT_VOICE_PORT:-8011}
 
 logs-agents: logs ## Alias → logs (tail des logs agents Python)
 

@@ -1,25 +1,23 @@
 """
-services/model_router_service.py — Routing intelligent multi-modèles
+model_router_service.py — Routage intelligent des modèles Ollama
 
-Analyse chaque tâche et route vers le modèle optimal :
-  simple   → llama3.2:3b   (rapide, local)
-  vision   → llava          (ou llama3.2-vision)
-  code     → qwen3-coder    (ou llama3.2)
-  complex  → llama3.2       (ou cloud)
-  critical → Claude API     (meilleur raisonnement)
-
-Adapté de model_router.py (PICO-RUCHE → Chimera) :
-  - Suppression de la dépendance core.utils (PICO-RUCHE)
-  - TIMEOUTS défini localement
-  - Import path propre pour l'écosystème Chimera
+Chaque tâche utilise le modèle optimal:
+- code/debug     → qwen3-coder:480b-cloud (le meilleur pour le code)
+- vision/screen  → llama3.2-vision:latest (voit les screenshots)
+- rapide/check   → llama3.2:3b (réponse en <2s)
+- raisonnement   → glm-4.6:cloud (strong reasoning)
+- général        → gpt-oss:20b-cloud (bon équilibre)
+- lourd/complex  → gpt-oss:120b-cloud (raisonnement profond)
+- embed          → nomic-embed-text (vecteurs)
 """
-
 from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 import requests
@@ -27,13 +25,51 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+OLLAMA_HOST = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
+
 # Timeouts HTTP en secondes (court=15s, moyen=90s, long=180s)
 _TIMEOUTS: dict[str, int] = {"short": 15, "medium": 90, "long": 180}
 
-# ─── Registre des modèles ─────────────────────────────────────────────────────
 
+# ─── Types de tâches ──────────────────────────────────────────────────────────
+
+class TaskType(str, Enum):
+    CODE      = "code"
+    DEBUG     = "debug"
+    VISION    = "vision"
+    FAST      = "fast"
+    REASONING = "reasoning"
+    GENERAL   = "general"
+    HEAVY     = "heavy"
+    EMBED     = "embed"
+    CREATIVE  = "creative"
+
+
+# ─── Mapping tâche → modèle optimal ──────────────────────────────────────────
+
+MODEL_MAP: dict[TaskType, str] = {
+    TaskType.CODE:      "qwen3-coder:480b-cloud",
+    TaskType.DEBUG:     "qwen3-coder:480b-cloud",
+    TaskType.VISION:    "llama3.2-vision:latest",
+    TaskType.FAST:      "llama3.2:3b",
+    TaskType.REASONING: "glm-4.6:cloud",
+    TaskType.GENERAL:   "gpt-oss:20b-cloud",
+    TaskType.HEAVY:     "gpt-oss:120b-cloud",
+    TaskType.EMBED:     "nomic-embed-text:latest",
+    TaskType.CREATIVE:  "minimax-m2:cloud",
+}
+
+# Fallback si le modèle cloud n'est pas disponible
+FALLBACK_MAP: dict[str, str] = {
+    "qwen3-coder:480b-cloud": "llama3:latest",
+    "gpt-oss:120b-cloud":     "llama3:latest",
+    "gpt-oss:20b-cloud":      "llama3.2:3b",
+    "glm-4.6:cloud":          "llama3:latest",
+    "minimax-m2:cloud":       "llama3:latest",
+}
+
+# Registre complet pour la compatibilité avec l'API existante
 MODEL_REGISTRY: dict[str, dict[str, Any]] = {
-    # ── Locaux Ollama ──────────────────────────────────────────────────────────
     "llama3.2:3b": {
         "ollama_name":    "llama3.2:3b",
         "strengths":      ["tâches simples", "instructions courtes", "rapide", "français"],
@@ -48,9 +84,9 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "speed":          "medium",
         "cost":           0,
     },
-    "llama3.2": {
-        "ollama_name":    "llama3.2:latest",
-        "strengths":      ["raisonnement complexe", "multi-étapes", "analyse", "planification"],
+    "llama3.2-vision": {
+        "ollama_name":    "llama3.2-vision:latest",
+        "strengths":      ["vision avancée", "raisonnement visuel", "OCR", "UI complexe"],
         "max_complexity": "complex",
         "speed":          "medium",
         "cost":           0,
@@ -62,13 +98,6 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "speed":          "medium",
         "cost":           0,
     },
-    "llama3.2-vision": {
-        "ollama_name":    "llama3.2-vision:latest",
-        "strengths":      ["vision avancée", "raisonnement visuel", "OCR", "UI complexe"],
-        "max_complexity": "complex",
-        "speed":          "medium",
-        "cost":           0,
-    },
     "moondream": {
         "ollama_name":    "moondream:latest",
         "strengths":      ["vision rapide", "description image", "détection UI"],
@@ -77,44 +106,47 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "cost":           0,
     },
     "qwen3-coder": {
-        "ollama_name":    "qwen3-coder:latest",
-        "strengths":      ["génération code", "debug", "scripts Python", "skill generation"],
+        "ollama_name":    "qwen3-coder:480b-cloud",
+        "strengths":      ["génération code", "debug", "scripts Python", "skill generation", "refactoring"],
         "max_complexity": "complex",
         "speed":          "medium",
         "cost":           0,
     },
-    # ── Modèles recommandés 2026 (open source SOTA) ───────────────────────────
-    "qwen2.5-coder:32b": {
-        "ollama_name":    "qwen2.5-coder:32b",
-        "strengths":      ["code expert", "refactoring", "multi-langage", "architecture",
-                           "debug complexe", "génération tests", "skill generation"],
-        "max_complexity": "complex",
-        "speed":          "medium",
-        "cost":           0,
-    },
-    "qwen2.5-coder:7b": {
-        "ollama_name":    "qwen2.5-coder:7b",
-        "strengths":      ["code rapide", "scripts", "debug simple", "autocomplete"],
+    "gpt-oss:20b": {
+        "ollama_name":    "gpt-oss:20b-cloud",
+        "strengths":      ["général", "instructions", "raisonnement moyen", "français"],
         "max_complexity": "medium",
-        "speed":          "fast",
+        "speed":          "medium",
         "cost":           0,
     },
-    "deepseek-r1:14b": {
-        "ollama_name":    "deepseek-r1:14b",
-        "strengths":      ["raisonnement profond", "chain-of-thought", "mathématiques",
-                           "planification multi-étapes", "auto-critique"],
+    "gpt-oss:120b": {
+        "ollama_name":    "gpt-oss:120b-cloud",
+        "strengths":      ["raisonnement profond", "tâches complexes", "multi-étapes", "analyse"],
         "max_complexity": "complex",
         "speed":          "slow",
         "cost":           0,
     },
-    "deepseek-r1:7b": {
-        "ollama_name":    "deepseek-r1:7b",
-        "strengths":      ["raisonnement", "chain-of-thought", "analyse"],
+    "glm-4.6": {
+        "ollama_name":    "glm-4.6:cloud",
+        "strengths":      ["raisonnement fort", "chain-of-thought", "mathématiques", "planification"],
+        "max_complexity": "complex",
+        "speed":          "medium",
+        "cost":           0,
+    },
+    "minimax-m2": {
+        "ollama_name":    "minimax-m2:cloud",
+        "strengths":      ["créatif", "multimodal", "génération contenu", "brainstorm"],
         "max_complexity": "medium",
         "speed":          "medium",
         "cost":           0,
     },
-    # ── Claude API ────────────────────────────────────────────────────────────
+    "nomic-embed-text": {
+        "ollama_name":    "nomic-embed-text:latest",
+        "strengths":      ["embeddings", "recherche sémantique", "similarité"],
+        "max_complexity": "simple",
+        "speed":          "fast",
+        "cost":           0,
+    },
     "claude": {
         "api":            "anthropic",
         "ollama_name":    "",
@@ -125,6 +157,29 @@ MODEL_REGISTRY: dict[str, dict[str, Any]] = {
         "speed":          "medium",
         "cost":           0.003,
     },
+}
+
+
+# ─── Keywords pour détecter le type de tâche automatiquement ─────────────────
+
+TASK_KEYWORDS: dict[TaskType, list[str]] = {
+    TaskType.CODE:      ["code", "python", "javascript", "function", "bug", "script",
+                         "programme", "écri", "génère", "def ", "class ", "import ",
+                         "pip install", "refactor"],
+    TaskType.DEBUG:     ["erreur", "error", "crash", "exception", "traceback",
+                         "debug", "fix", "répare", "corrige", "broken"],
+    TaskType.VISION:    ["screenshot", "écran", "ecran", "image", "vois", "regarde",
+                         "capture", "pixel", "clique", "bouton", "fenêtre", "icône"],
+    TaskType.FAST:      ["oui", "non", "ok", "status", "ping", "check",
+                         "rapide", "vite", "confirme", "valide"],
+    TaskType.REASONING: ["pourquoi", "analyse", "réfléchi", "compare", "évalue",
+                         "stratégie", "plan", "explique", "comprends", "deduis"],
+    TaskType.CREATIVE:  ["crée", "imagine", "invente", "brainstorm", "idée",
+                         "génère une idée", "innove", "rédige"],
+    TaskType.HEAVY:     ["complexe", "long", "complet", "exhaustif", "tout",
+                         "détaillé", "approfondi", "global"],
+    TaskType.EMBED:     ["embed", "embedding", "vecteur", "similarité",
+                         "sémantique", "indexe", "recherche vectorielle"],
 }
 
 
@@ -154,6 +209,43 @@ class TaskProfile:
         }
 
 
+# ─── Fonctions utilitaires ────────────────────────────────────────────────────
+
+def detect_task_type(prompt: str) -> TaskType:
+    """Détecte automatiquement le type de tâche depuis le prompt."""
+    prompt_lower = prompt.lower()
+
+    scores: dict[TaskType, int] = {task: 0 for task in TaskType}
+    for task_type, keywords in TASK_KEYWORDS.items():
+        for kw in keywords:
+            if kw in prompt_lower:
+                scores[task_type] += 1
+
+    best = max(scores, key=lambda t: scores[t])
+    if scores[best] == 0:
+        return TaskType.GENERAL
+    return best
+
+
+def get_model_for_task(task_type: TaskType | str, fallback: bool = True) -> str:
+    """Retourne le meilleur modèle pour un type de tâche."""
+    if isinstance(task_type, str):
+        try:
+            task_type = TaskType(task_type)
+        except ValueError:
+            task_type = TaskType.GENERAL
+
+    model = MODEL_MAP.get(task_type, MODEL_MAP[TaskType.GENERAL])
+    return model
+
+
+def get_model_for_prompt(prompt: str) -> tuple[str, TaskType]:
+    """Détecte le type et retourne le modèle optimal. Retourne (model, task_type)."""
+    task_type = detect_task_type(prompt)
+    model = get_model_for_task(task_type)
+    return model, task_type
+
+
 # ─── ModelRouterService ───────────────────────────────────────────────────────
 
 class ModelRouterService:
@@ -163,11 +255,11 @@ class ModelRouterService:
     Usage:
         router = ModelRouterService()
         response = router.think(prompt="Write a sort function", task_type="code")
-        print(response.text)
+        print(response)
     """
 
     def __init__(self) -> None:
-        self.ollama_url    = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        self.ollama_url    = OLLAMA_HOST
         self.routing_mode  = os.getenv("ROUTING_MODE", "auto")
         self.anthropic_key = os.getenv("ANTHROPIC_API_KEY", "")
         self.available_models: list[str] = []
@@ -178,7 +270,7 @@ class ModelRouterService:
     def think(
         self,
         prompt: str,
-        task_type: str = "reasoning",
+        task_type: str = "general",
         system_prompt: str = "",
         preferred_model: str = "",
         routing_mode_override: str = "",
@@ -186,14 +278,12 @@ class ModelRouterService:
         """
         Analyse la tâche, sélectionne le modèle, appelle le LLM.
         Retourne (response_text, task_profile).
-        Raises RuntimeError si aucun modèle disponible.
         """
         if not self.available_models:
             raise RuntimeError("Aucun modèle LLM disponible (Ollama inaccessible, pas de clé Anthropic)")
 
         profile = self.analyze_task(prompt, task_type)
 
-        # Mode override passé par l'appelant
         saved_mode = self.routing_mode
         if routing_mode_override:
             self.routing_mode = routing_mode_override
@@ -205,7 +295,7 @@ class ModelRouterService:
         else:
             model = self.select_model(profile)
 
-        self.routing_mode = saved_mode  # restore
+        self.routing_mode = saved_mode
 
         response = self.call_model(model, prompt, system_prompt)
         return response, profile
@@ -213,7 +303,7 @@ class ModelRouterService:
     def chat(
         self,
         messages: list[dict[str, str]],
-        task_type: str = "reasoning",
+        task_type: str = "general",
         system_prompt: str = "",
     ) -> tuple[str, TaskProfile]:
         """
@@ -232,7 +322,6 @@ class ModelRouterService:
         if model == "claude" and self.anthropic_key:
             response = self._call_claude_chat(messages, system_prompt)
         else:
-            # Flatten history into a single prompt for Ollama
             history = "\n".join(
                 f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
                 for m in messages
@@ -283,7 +372,7 @@ class ModelRouterService:
     def _has(self, model: str) -> bool:
         return model in self.available_models
 
-    # ─── Analyse de la tâche ─────────────────────────────────────────────────
+    # ─── Analyse de la tâche ──────────────────────────────────────────────────
 
     def analyze_task(self, task: str, task_type: str = "") -> TaskProfile:
         """Analyse la requête et retourne un TaskProfile."""
@@ -300,7 +389,7 @@ class ModelRouterService:
         code_kws = ["code", "script", "python", "programme", "fonction",
                     "debug", "erreur", "installe", "pip", "import",
                     "def ", "class ", "génère un skill", "répare le code"]
-        requires_code = (task_type == "code") or any(kw in tl for kw in code_kws)
+        requires_code = (task_type in ("code", "debug")) or any(kw in tl for kw in code_kws)
 
         # Complexité
         step_kws      = ["puis", "ensuite", "après", "apres", "enfin", "d'abord",
@@ -358,10 +447,10 @@ class ModelRouterService:
             confidence_required = confidence,
         )
 
-    # ─── Sélection du modèle ─────────────────────────────────────────────────
+    # ─── Sélection du modèle ──────────────────────────────────────────────────
 
     def select_model(self, profile: TaskProfile) -> str:
-        """Retourne la clé du modèle optimal selon le profil."""
+        """Retourne le modèle optimal selon le profil de tâche."""
         fallback = self._ollama_fallback()
         mode     = self.routing_mode
 
@@ -370,82 +459,77 @@ class ModelRouterService:
         elif mode == "local_only":
             model, reason = self._select_local(profile, fallback)
         else:
-            model, reason = self._select_auto(profile, fallback)
+            model, reason = self._select_smart(profile, fallback)
 
         if model not in self.available_models:
-            reason += f" → fallback {fallback} ({model} non disponible)"
-            model   = fallback
+            # Tenter le fallback cloud → local
+            fallback_model = FALLBACK_MAP.get(
+                MODEL_REGISTRY.get(model, {}).get("ollama_name", ""), fallback
+            )
+            reason += f" → fallback {fallback_model} ({model} non disponible)"
+            model   = fallback_model if fallback_model in self.available_models else fallback
 
         profile.selected_model = model
         profile.routing_reason = reason
         return model
 
-    def _best_coder(self, fallback: str) -> tuple[str, str]:
-        """Retourne le meilleur modèle de code disponible (ordre de préférence 2026)."""
-        for m in ("qwen2.5-coder:32b", "qwen2.5-coder:7b", "qwen3-coder"):
-            if self._has(m): return m, f"code → {m}"
-        return fallback, f"code fallback → {fallback}"
+    def _select_smart(self, profile: TaskProfile, fallback: str) -> tuple[str, str]:
+        """Routage intelligent basé sur le type de tâche."""
+        task_type_enum = TaskType.GENERAL
 
-    def _best_reasoner(self, fallback: str) -> tuple[str, str]:
-        """Retourne le meilleur modèle de raisonnement disponible."""
-        for m in ("deepseek-r1:14b", "deepseek-r1:7b", "llama3.2"):
-            if self._has(m): return m, f"reasoning → {m}"
-        return fallback, f"reasoning fallback → {fallback}"
+        # Déterminer le TaskType depuis le profil
+        if profile.type == "vision" or profile.requires_vision:
+            task_type_enum = TaskType.VISION
+        elif profile.type == "code" or profile.requires_code:
+            if "debug" in profile.type:
+                task_type_enum = TaskType.DEBUG
+            else:
+                task_type_enum = TaskType.CODE
+        elif profile.complexity == "critical":
+            task_type_enum = TaskType.HEAVY
+        elif profile.complexity == "complex":
+            task_type_enum = TaskType.REASONING
+        elif profile.complexity == "simple" and profile.estimated_steps == 1:
+            task_type_enum = TaskType.FAST
+        else:
+            task_type_enum = TaskType.GENERAL
+
+        model  = get_model_for_task(task_type_enum)
+        reason = f"smart: {task_type_enum.value} → {model}"
+        return model, reason
 
     def _select_local(self, profile: TaskProfile, fallback: str) -> tuple[str, str]:
+        """Mode local_only : préfère les modèles locaux disponibles."""
         if profile.requires_vision:
-            m = "llava" if self._has("llava") else fallback
-            return m, "local: vision → llava"
-        if profile.requires_code:
-            return self._best_coder(fallback)
-        if profile.complexity == "complex":
-            return self._best_reasoner(fallback)
-        m = "llama3.2:3b" if self._has("llama3.2:3b") else fallback
-        return m, "local: simple → llama3.2:3b"
-
-    def _select_auto(self, profile: TaskProfile, fallback: str) -> tuple[str, str]:
-        c = profile.complexity
-
-        if profile.type == "web":
-            m = "llama3.2:3b" if self._has("llama3.2:3b") else fallback
-            return m, "auto: web → llama3.2:3b"
-
-        if c == "critical":
-            m = "claude" if self._has("claude") else fallback
-            return m, "auto: critique → claude"
-
-        if c == "complex" and profile.requires_vision:
-            m = (
-                "llama3.2-vision" if self._has("llama3.2-vision")
-                else "llava" if self._has("llava")
-                else fallback
+            m = next(
+                (k for k in ("llama3.2-vision", "llava", "moondream") if self._has(k)),
+                fallback
             )
-            return m, "auto: complexe+vision → llama3.2-vision"
-
-        if c == "complex" and profile.requires_code:
-            return self._best_coder(fallback)
-
-        if c == "complex":
-            return self._best_reasoner(fallback)
-
-        if profile.requires_vision:
-            m = "llava" if self._has("llava") else "moondream" if self._has("moondream") else fallback
-            return m, "auto: vision → llava"
-
+            return m, f"local: vision → {m}"
         if profile.requires_code:
-            return self._best_coder(fallback)
-
+            m = next(
+                (k for k in ("qwen3-coder",) if self._has(k)),
+                fallback
+            )
+            return m, f"local: code → {m}"
+        if profile.complexity in ("complex", "critical"):
+            m = "llama3" if self._has("llama3") else fallback
+            return m, f"local: complex → {m}"
         m = "llama3.2:3b" if self._has("llama3.2:3b") else fallback
-        return m, f"auto: {c} → llama3.2:3b"
+        return m, f"local: simple → {m}"
 
     def _ollama_fallback(self) -> str:
-        for m in ("llama3.2:3b", "llama3", "llama3.2", "llava"):
+        """Modèle de secours local minimal."""
+        for m in ("llama3.2:3b", "llama3", "llava"):
             if self._has(m):
                 return m
-        local = [m for m in self.available_models if MODEL_REGISTRY.get(m, {}).get("api") != "anthropic"]
+        local = [
+            m for m in self.available_models
+            if MODEL_REGISTRY.get(m, {}).get("api") != "anthropic"
+        ]
         return local[0] if local else os.getenv("OLLAMA_MODEL_DEFAULT", "llama3.2:3b")
 
-    # ─── Appels LLM ──────────────────────────────────────────────────────────
+    # ─── Appels LLM ───────────────────────────────────────────────────────────
 
     def call_model(self, model: str, prompt: str, system: str = "") -> str:
         """Dispatche vers Anthropic ou Ollama. Retourne le texte généré."""
@@ -468,9 +552,9 @@ class ModelRouterService:
                 import anthropic
                 client = anthropic.Anthropic(api_key=self.anthropic_key)
                 kwargs: dict[str, Any] = {
-                    "model":    model_id,
+                    "model":      model_id,
                     "max_tokens": 4096,
-                    "messages": [{"role": "user", "content": prompt}],
+                    "messages":   [{"role": "user", "content": prompt}],
                 }
                 if system:
                     kwargs["system"] = system
@@ -489,9 +573,9 @@ class ModelRouterService:
             import anthropic
             client = anthropic.Anthropic(api_key=self.anthropic_key)
             kwargs: dict[str, Any] = {
-                "model":    model_id,
+                "model":      model_id,
                 "max_tokens": 4096,
-                "messages": messages,
+                "messages":   messages,
             }
             if system:
                 kwargs["system"] = system
@@ -528,3 +612,29 @@ class ModelRouterService:
                     continue
                 return f"[Erreur Ollama {ollama_model}] {exc}"
         return "[Ollama indisponible]"
+
+
+# ─── Route FastAPI ────────────────────────────────────────────────────────────
+
+from fastapi import APIRouter
+
+router = APIRouter(prefix="/model-router", tags=["model-router"])
+
+
+@router.post("/route")
+async def route_prompt(body: dict):
+    """Détermine le meilleur modèle pour un prompt donné."""
+    prompt = body.get("prompt", "")
+    model, task_type = get_model_for_prompt(prompt)
+    return {
+        "model":          model,
+        "task_type":      task_type,
+        "prompt_preview": prompt[:100],
+        "all_models":     {t.value: m for t, m in MODEL_MAP.items()},
+    }
+
+
+@router.get("/models")
+async def list_model_map():
+    """Liste le mapping complet tâche → modèle."""
+    return {t.value: m for t, m in MODEL_MAP.items()}

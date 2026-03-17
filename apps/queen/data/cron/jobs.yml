@@ -1,0 +1,24 @@
+jobs:
+  - name: rapport-quotidien
+    cron: "0 9 * * *"
+    action: mission
+    mission: "Génère et envoie le rapport quotidien sur Telegram: état des agents, missions terminées, objectifs du jour"
+    enabled: true
+
+  - name: nettoyage-logs
+    cron: "0 3 * * *"
+    action: mission
+    mission: "Nettoyer les vieux logs dans ~/.ruche/logs/ et /tmp/chimera_agents_logs/ (garder 7 jours)"
+    enabled: true
+
+  - name: health-check
+    cron: "*/15 * * * *"
+    action: http
+    url: "http://localhost:8003/health"
+    enabled: true
+
+  - name: objectifs-auto
+    cron: "0 1 * * *"
+    action: mission
+    mission: "Générer 3 nouveaux objectifs pour demain basés sur les missions d'aujourd'hui"
+    enabled: true

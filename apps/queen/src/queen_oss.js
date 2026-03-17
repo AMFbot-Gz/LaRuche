@@ -32,7 +32,9 @@ import { startDashboardWSServer, broadcastDashboard } from './services/websocket
 import { resilientFireAndForget, SERVICES } from './utils/resilientFetch.js';
 import { isFirstRun, printWelcomeBanner, runFirstRunChecks, markInitialized } from './utils/firstRun.js';
 import { ComputerUseLoop } from './services/computer_use_loop.js';
+import { ComputerUseLoop as ComputerUseLoopSimple, setupComputerUseRoutes } from './computer_use_loop.js';
 import { hitlManager } from './core/hitl_manager.js';
+import { ProactiveLoop } from './proactive_loop.js';
 
 dotenv.config();
 
@@ -690,10 +692,47 @@ try {
   logger.warn(`Cron runner: ${err.message}`);
 }
 
+// ─── Boucle proactive JARVIS ───────────────────────────────────────────────
+// Surveille agents, fichiers, Ollama et déclenche des missions autonomes.
+const proactive = new ProactiveLoop({
+  onMission: async (mission) => {
+    try {
+      await runMission(mission, null);
+    } catch (err) {
+      logger.warn(`[Proactive] Mission échouée: ${err.message}`);
+    }
+  },
+  onAlert: async (message) => {
+    // Alerte via Telegram si le bot est disponible et qu'on est en mode Telegram
+    if (!STANDALONE && CONFIG.TELEGRAM_TOKEN && CONFIG.ADMIN_ID) {
+      try {
+        await fetch(
+          `https://api.telegram.org/bot${CONFIG.TELEGRAM_TOKEN}/sendMessage`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: CONFIG.ADMIN_ID, text: message }),
+          }
+        );
+      } catch (e) {
+        logger.warn(`[Proactive] Alerte Telegram échouée: ${e.message}`);
+      }
+    }
+    logger.warn(`[Proactive] Alerte: ${message}`);
+  },
+  log: logger,
+});
+proactive.start();
+
 // ─── MODE STANDALONE ───────────────────────────────────────────────────────────────────────
 if (STANDALONE) {
   logger.info("🌐 Mode Standalone activé — Telegram désactivé");
-  startStandaloneServer({ loadMissions, saveMission, runMission, autoDetectRoles, broadcastHUD, logger, subagentManager, healthMonitor, missionCache: _missionCache, eventBus, computerUseLoop });
+  const { app: standaloneApp } = startStandaloneServer({ loadMissions, saveMission, runMission, autoDetectRoles, broadcastHUD, logger, subagentManager, healthMonitor, missionCache: _missionCache, eventBus, computerUseLoop });
+
+  // Boucle Computer Use légère (Tony Stark mode) — routes supplémentaires
+  const cuLoop = new ComputerUseLoopSimple({ log: logger });
+  setupComputerUseRoutes(standaloneApp, cuLoop);
+
   const shutdown = () => { logger.info("🛑 Arrêt en cours..."); wss.close(); process.exit(0); };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
