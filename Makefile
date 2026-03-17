@@ -8,7 +8,7 @@ export
         test test-python test-node test-queen test-watch \
         docker-up docker-down docker-logs docker-reset \
         migrate db-migrate clean lint type-check status \
-        doctor setup help
+        doctor setup help onboard upgrade restart stop
 
 # ── Variables ───────────────────────────────────────────────────────────────
 PYTHON := python3
@@ -292,5 +292,27 @@ status: ## Affiche l'état de tous les services
 	@curl -s --max-time 2 http://localhost:3000/api/health 2>/dev/null && echo "✅ Queen :3000" || echo "❌ Queen :3000"
 	$(MAKE) agents-status
 
+onboard: ## Premier lancement guidé (wizard interactif)
+	@chmod +x ./ruche 2>/dev/null || true
+	@./ruche onboard
+
+upgrade: ## Mettre à jour (git pull + deps + restart)
+	@echo "⬆️  Mise à jour La Ruche..."
+	@git pull origin main
+	@$(MAKE) install
+	@$(MAKE) restart
+
+restart: ## Redémarrer tous les services
+	@$(MAKE) stop
+	@sleep 2
+	@$(MAKE) dev
+
+stop: ## Arrêter tous les services (Queen + agents + dashboard)
+	@echo "🛑 Arrêt de La Ruche..."
+	@chmod +x ./ruche 2>/dev/null || true
+	@./ruche stop
+
 help: ## Affiche cette aide
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
+
+.DEFAULT_GOAL := help
