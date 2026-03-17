@@ -11,7 +11,8 @@
 
 import { watch } from "fs";
 import { readdir, readFile } from "fs/promises";
-import { join, homedir } from "path";
+import { join } from "path";
+import { homedir } from "os";
 
 const AGENTS = [
   { name: "orchestration", port: 8001 },
