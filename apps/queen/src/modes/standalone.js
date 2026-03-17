@@ -17,6 +17,7 @@ import { registerMarketplaceRoutes } from "../api/marketplace.js";
 import { startCoeusLoop } from "../agents/coeus.js";
 import { createComputerUseRoutes } from "../api/computer_use_routes.js";
 import { registerBillingRoutes } from "../api/billing_routes.js";
+import { setupWebhooks } from "../webhook_handler.js";
 
 /**
  * Lance le serveur API standalone
@@ -67,6 +68,9 @@ export function startStandaloneServer(deps) {
 
   // ─── Routes Billing Stripe ──────────────────────────────────────────────────
   registerBillingRoutes(app);
+
+  // ─── Webhooks N8N ────────────────────────────────────────────────────────────
+  setupWebhooks(app);
 
   // ─── Route racine ───────────────────────────────────────────────────────────
   app.get("/", (c) =>

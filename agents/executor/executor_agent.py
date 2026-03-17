@@ -48,6 +48,7 @@ from agents.executor.schemas.executor_schemas import (
     TypeTextResponse,
 )
 from agents.executor.services import keyboard_service, shell_service
+from agents.executor.services.n8n_service import router as n8n_router
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -56,6 +57,8 @@ app = FastAPI(
     description="Le bras armé de Chimera — shell sécurisé, clavier, souris, applications",
     version="1.0.0",
 )
+
+app.include_router(n8n_router)
 
 
 # ─── /health ──────────────────────────────────────────────────────────────────
