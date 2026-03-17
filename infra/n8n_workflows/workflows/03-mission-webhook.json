@@ -1,0 +1,91 @@
+{
+  "name": "La Ruche — Mission via Webhook",
+  "nodes": [
+    {
+      "id": "webhook-in",
+      "name": "Receive Mission",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "la-ruche-mission",
+      "parameters": {
+        "path": "la-ruche-mission",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "validate",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "has-mission",
+              "leftValue": "={{ $json.body?.mission }}",
+              "rightValue": "",
+              "operator": {"type": "string", "operation": "notEmpty"}
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "send-to-ruche",
+      "name": "Send Mission to La Ruche",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 220],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RUCHE_URL || 'http://host.docker.internal:3000' }}/webhook/n8n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"workflow\": \"mission-webhook\", \"data\": {\"mission\": \"{{ $('Receive Mission').item.json.body.mission }}\", \"priority\": \"{{ $('Receive Mission').item.json.body.priority || 'normal' }}\"}}",
+        "timeout": 60000,
+        "options": {}
+      }
+    },
+    {
+      "id": "respond-ok",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [900, 220],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"accepted\", \"mission_id\": \"{{ $('Send Mission to La Ruche').item.json.mission_id || 'queued' }}\", \"timestamp\": \"{{ $now.toISO() }}\"}"
+      }
+    },
+    {
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [680, 420],
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 400,
+        "responseBody": "{\"error\": \"Mission field required\", \"example\": {\"mission\": \"Analyse mon code Python\"}}"
+      }
+    }
+  ],
+  "connections": {
+    "Receive Mission": {"main": [[{"node": "Validate Input", "type": "main", "index": 0}]]},
+    "Validate Input": {
+      "main": [
+        [{"node": "Send Mission to La Ruche", "type": "main", "index": 0}],
+        [{"node": "Respond Error", "type": "main", "index": 0}]
+      ]
+    },
+    "Send Mission to La Ruche": {"main": [[{"node": "Respond Success", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "active": false,
+  "tags": [{"name": "la-ruche"}, {"name": "api"}]
+}

@@ -1,0 +1,53 @@
+{
+  "name": "La Ruche — Objectifs Nocturnes (1h00)",
+  "nodes": [
+    {
+      "id": "cron-1h",
+      "name": "Every Night 1h00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 1 * * *"}]
+        }
+      }
+    },
+    {
+      "id": "generate-goals",
+      "name": "Generate Tomorrow Goals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RUCHE_URL || 'http://host.docker.internal:3000' }}/webhook/n8n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"workflow\": \"nightly-goals\", \"event\": \"scheduled\", \"data\": {\"mission\": \"Analyser les missions et accomplissements d'aujourd'hui. Générer 5 objectifs prioritaires pour demain. Stocker dans la base de données goals. Retourner un résumé en Markdown.\"}}",
+        "timeout": 120000
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "notify-goals",
+      "name": "Send Goals Summary",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [680, 300],
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_ADMIN_ID }}",
+        "text": "🌙 *Objectifs pour demain*\n\n{{ $('Generate Tomorrow Goals').item.json.response || 'Objectifs générés et stockés.' }}\n\n_Bonne nuit_ 🐝",
+        "additionalFields": {"parse_mode": "Markdown"}
+      },
+      "credentials": {"telegramApi": {"id": "telegram-creds", "name": "Telegram"}}
+    }
+  ],
+  "connections": {
+    "Every Night 1h00": {"main": [[{"node": "Generate Tomorrow Goals", "type": "main", "index": 0}]]},
+    "Generate Tomorrow Goals": {"main": [[{"node": "Send Goals Summary", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "tags": [{"name": "la-ruche"}, {"name": "goals"}]
+}

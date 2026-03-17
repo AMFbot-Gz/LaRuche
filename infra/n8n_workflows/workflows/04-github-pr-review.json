@@ -1,0 +1,80 @@
+{
+  "name": "La Ruche — GitHub PR Auto-Review",
+  "nodes": [
+    {
+      "id": "github-webhook",
+      "name": "GitHub PR Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "webhookId": "github-pr-review",
+      "parameters": {
+        "path": "github-pr",
+        "httpMethod": "POST",
+        "responseMode": "onReceived",
+        "options": {}
+      }
+    },
+    {
+      "id": "filter-opened",
+      "name": "Only PR Opened",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "action-check",
+              "leftValue": "={{ $json.body?.action }}",
+              "rightValue": "opened",
+              "operator": {"type": "string", "operation": "equals"}
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "review-mission",
+      "name": "Request Code Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 220],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RUCHE_URL || 'http://host.docker.internal:3000' }}/webhook/n8n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"workflow\": \"github-pr\", \"event\": \"pr_opened\", \"data\": {\"mission\": \"Faire une revue de code de la PR: {{ $('GitHub PR Webhook').item.json.body.pull_request?.title }}. URL: {{ $('GitHub PR Webhook').item.json.body.pull_request?.html_url }}. Auteur: {{ $('GitHub PR Webhook').item.json.body.pull_request?.user?.login }}. Analyser les changements et fournir un feedback constructif.\", \"repo\": \"{{ $('GitHub PR Webhook').item.json.body.repository?.full_name }}\", \"pr_number\": \"{{ $('GitHub PR Webhook').item.json.body.pull_request?.number }}\"}}",
+        "timeout": 60000
+      }
+    },
+    {
+      "id": "notify-telegram",
+      "name": "Notify on Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [900, 220],
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_ADMIN_ID }}",
+        "text": "🔍 *PR Review en cours*\n\n*{{ $('GitHub PR Webhook').item.json.body.pull_request?.title }}*\nPar: {{ $('GitHub PR Webhook').item.json.body.pull_request?.user?.login }}\n{{ $('GitHub PR Webhook').item.json.body.pull_request?.html_url }}",
+        "additionalFields": {"parse_mode": "Markdown"}
+      },
+      "credentials": {"telegramApi": {"id": "telegram-creds", "name": "Telegram"}}
+    }
+  ],
+  "connections": {
+    "GitHub PR Webhook": {"main": [[{"node": "Only PR Opened", "type": "main", "index": 0}]]},
+    "Only PR Opened": {
+      "main": [
+        [{"node": "Request Code Review", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Request Code Review": {"main": [[{"node": "Notify on Telegram", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "tags": [{"name": "la-ruche"}, {"name": "github"}]
+}

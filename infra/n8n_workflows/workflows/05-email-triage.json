@@ -1,0 +1,50 @@
+{
+  "name": "La Ruche — Email Triage Automatique",
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Check Emails Every 5min",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "minutes", "minutesInterval": 5}]
+        }
+      }
+    },
+    {
+      "id": "triage-code",
+      "name": "Triage Logic",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "// Simulation: en prod, connecter un node IMAP ici\n// Ce node prépare la mission de triage\nconst now = new Date().toISOString()\nreturn [{\n  json: {\n    mission: `Analyser et trier les emails non lus. Date: ${now}. Catégories: urgent/important/newsletter/spam. Pour les urgents, préparer une réponse draft. Pour les newsletters, marquer comme lu.`,\n    timestamp: now\n  }\n}]"
+      }
+    },
+    {
+      "id": "send-triage",
+      "name": "Send Triage Mission",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RUCHE_URL || 'http://host.docker.internal:3000' }}/webhook/n8n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"workflow\": \"email-triage\", \"data\": {\"mission\": \"{{ $json.mission }}\"}}",
+        "timeout": 30000
+      },
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Check Emails Every 5min": {"main": [[{"node": "Triage Logic", "type": "main", "index": 0}]]},
+    "Triage Logic": {"main": [[{"node": "Send Triage Mission", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "tags": [{"name": "la-ruche"}, {"name": "email"}]
+}

@@ -1,0 +1,54 @@
+{
+  "name": "La Ruche — Rapport Quotidien 9h00",
+  "nodes": [
+    {
+      "id": "cron-9h",
+      "name": "Every Day 9h00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "cronExpression", "expression": "0 9 * * *"}]
+        }
+      }
+    },
+    {
+      "id": "trigger-report",
+      "name": "Trigger Daily Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.RUCHE_URL || 'http://host.docker.internal:3000' }}/webhook/n8n",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"workflow\": \"daily-report\", \"event\": \"scheduled\", \"data\": {\"date\": \"{{ $now.toFormat('yyyy-MM-dd') }}\", \"mission\": \"Génère un rapport quotidien: missions terminées hier, état de santé des agents, 3 objectifs pour aujourd'hui. Format Telegram Markdown.\"}}",
+        "timeout": 30000,
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "send-report",
+      "name": "Send Report to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [680, 300],
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_ADMIN_ID }}",
+        "text": "📊 *Rapport Quotidien La Ruche*\n{{ $('Trigger Daily Report').item.json.response || 'Rapport en cours de génération...' }}",
+        "additionalFields": {"parse_mode": "Markdown"}
+      },
+      "credentials": {"telegramApi": {"id": "telegram-creds", "name": "Telegram"}}
+    }
+  ],
+  "connections": {
+    "Every Day 9h00": {"main": [[{"node": "Trigger Daily Report", "type": "main", "index": 0}]]},
+    "Trigger Daily Report": {"main": [[{"node": "Send Report to Telegram", "type": "main", "index": 0}]]}
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "active": false,
+  "tags": [{"name": "la-ruche"}, {"name": "reporting"}]
+}

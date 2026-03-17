@@ -1,0 +1,90 @@
+{
+  "name": "La Ruche — Health Monitor",
+  "nodes": [
+    {
+      "id": "cron-trigger",
+      "name": "Every 15 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "minutes", "minutesInterval": 15}]
+        }
+      }
+    },
+    {
+      "id": "check-health",
+      "name": "Check La Ruche Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.RUCHE_URL || 'http://host.docker.internal:3000' }}/api/status",
+        "timeout": 10000,
+        "options": {
+          "response": {
+            "response": {"responseFormat": "json"}
+          }
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "if-down",
+      "name": "Is System Down?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true},
+          "conditions": [
+            {
+              "id": "check-error",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {"type": "string", "operation": "notEmpty"}
+            }
+          ],
+          "combinator": "or"
+        }
+      }
+    },
+    {
+      "id": "send-alert",
+      "name": "Send Telegram Alert",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [900, 200],
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_ADMIN_ID }}",
+        "text": "🚨 *La Ruche — ALERTE*\n\nSystème inaccessible à {{ $now.toISO() }}\n\nVérifier: `./ruche health`",
+        "additionalFields": {"parse_mode": "Markdown"}
+      },
+      "credentials": {"telegramApi": {"id": "telegram-creds", "name": "Telegram"}}
+    },
+    {
+      "id": "all-good",
+      "name": "System OK",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [900, 400],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Every 15 Minutes": {"main": [[{"node": "Check La Ruche Health", "type": "main", "index": 0}]]},
+    "Check La Ruche Health": {"main": [[{"node": "Is System Down?", "type": "main", "index": 0}]]},
+    "Is System Down?": {
+      "main": [
+        [{"node": "Send Telegram Alert", "type": "main", "index": 0}],
+        [{"node": "System OK", "type": "main", "index": 0}]
+      ]
+    }
+  },
+  "settings": {"executionOrder": "v1", "saveManualExecutions": true},
+  "active": false,
+  "tags": [{"name": "la-ruche"}, {"name": "monitoring"}]
+}

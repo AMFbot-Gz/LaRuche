@@ -1,0 +1,88 @@
+{
+  "name": "La Ruche — Website Monitor",
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {
+          "interval": [{"field": "minutes", "minutesInterval": 5}]
+        }
+      }
+    },
+    {
+      "id": "check-sites",
+      "name": "Prepare Sites List",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "// Configurer la liste des sites à monitorer\nconst sites = [\n  { name: 'La Ruche Dashboard', url: (process.env.DASHBOARD_URL || 'http://localhost:3001') },\n  { name: 'La Ruche Queen API', url: (process.env.RUCHE_URL || 'http://localhost:3000') + '/health' },\n  // Ajouter les sites clients ici:\n  // { name: 'Site Client', url: 'https://client.com' },\n]\nreturn sites.map(s => ({json: s}))"
+      }
+    },
+    {
+      "id": "http-check",
+      "name": "Check Each Site",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [680, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.url }}",
+        "timeout": 10000,
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+    {
+      "id": "check-failed",
+      "name": "Site Down?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "id": "error-check",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {"type": "string", "operation": "notEmpty"}
+            }
+          ],
+          "combinator": "or"
+        }
+      }
+    },
+    {
+      "id": "alert-down",
+      "name": "Alert Site Down",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.1,
+      "position": [1120, 200],
+      "parameters": {
+        "chatId": "={{ $env.TELEGRAM_ADMIN_ID }}",
+        "text": "🔴 *Site DOWN*: {{ $('Prepare Sites List').item.json.name }}\nURL: {{ $('Prepare Sites List').item.json.url }}\nErreur: {{ $json.error }}\nHeure: {{ $now.toISO() }}",
+        "additionalFields": {"parse_mode": "Markdown"}
+      },
+      "credentials": {"telegramApi": {"id": "telegram-creds", "name": "Telegram"}}
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {"main": [[{"node": "Prepare Sites List", "type": "main", "index": 0}]]},
+    "Prepare Sites List": {"main": [[{"node": "Check Each Site", "type": "main", "index": 0}]]},
+    "Check Each Site": {"main": [[{"node": "Site Down?", "type": "main", "index": 0}]]},
+    "Site Down?": {
+      "main": [
+        [{"node": "Alert Site Down", "type": "main", "index": 0}],
+        []
+      ]
+    }
+  },
+  "settings": {"executionOrder": "v1"},
+  "active": false,
+  "tags": [{"name": "la-ruche"}, {"name": "monitoring"}]
+}
