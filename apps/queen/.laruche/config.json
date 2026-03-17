@@ -1,0 +1,11 @@
+{
+  "models": {
+    "strategist":  "llama3:latest",
+    "architect":   "llama3.2:latest",
+    "worker":      "llama3.2:3b",
+    "vision":      "llama3.2-vision:latest",
+    "visionFast":  "moondream:latest",
+    "synthesizer": "llama3.2:latest",
+    "compressor":  "llama3.2:3b"
+  }
+}

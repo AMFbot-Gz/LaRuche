@@ -429,10 +429,48 @@ Réponse courte et directe.`;
 }
 
 export async function runMission(command, missionId) {
-  // Mode Exécution Directe Totale :
-  // 1. Toujours tenter la pipeline directe (rules → memory → LLM skills)
-  // 2. Fallback butterfly uniquement si aucun step valide généré (question textuelle pure)
-  return runComputerUseMission(command, missionId);
+  // Routage intelligent : computer-use → IntentPipeline, texte pur → LLM direct
+  if (isComputerUseIntent(command)) {
+    return runComputerUseMission(command, missionId);
+  }
+  return runTextMission(command, missionId);
+}
+
+/**
+ * Mission textuelle pure (question, rapport, analyse) → réponse LLM directe.
+ * Zéro computer-use, zéro planner, réponse en < 5s.
+ */
+async function runTextMission(command, missionId) {
+  logger.info(`💬 Mission texte → LLM direct`, { mission_id: missionId });
+  if (missionId) updateMission(missionId, { status: "running" });
+
+  const hudFn = (event) => {
+    broadcastHUD({ ...event, missionId });
+    if (missionId) appendMissionEvent(missionId, event);
+  };
+
+  hudFn({ type: "thinking", agent: "Worker", thought: command.slice(0, 60) });
+
+  try {
+    const t0 = Date.now();
+    const res = await callLLM(command, { role: "worker", temperature: 0.4, timeout: 60000, mission_id: missionId });
+    const text = res.text || "Aucune réponse";
+    const duration = Date.now() - t0;
+
+    hudFn({ type: "mission_complete", duration });
+    if (missionId) updateMission(missionId, {
+      status: "success",
+      result: text,
+      duration,
+      models: [res.model],
+      completedAt: new Date().toISOString(),
+    });
+    return text;
+  } catch (err) {
+    logger.warn(`[TextMission] Erreur: ${err.message}`);
+    if (missionId) updateMission(missionId, { status: "error", error: err.message });
+    return `Erreur: ${err.message}`;
+  }
 }
 
 /**
