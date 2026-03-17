@@ -435,6 +435,14 @@ importers:
         specifier: ^7.0.0
         version: 7.2.2
 
+  packages/chimera-config: {}
+
+  packages/chimera-protocol: {}
+
+  packages/chimera-sdk: {}
+
+  packages/chimera-types: {}
+
   packages/common:
     devDependencies:
       typescript:

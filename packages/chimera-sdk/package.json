@@ -1,0 +1,10 @@
+{
+  "name": "@chimera/sdk",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "type-check": "tsc --noEmit"
+  }
+}

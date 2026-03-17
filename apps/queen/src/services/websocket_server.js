@@ -24,7 +24,7 @@
 
 import { WebSocketServer } from 'ws';
 import { timingSafeEqual } from 'crypto';
-import eventBus from '../../core/events/event_bus.js';
+import eventBus from '../core/events/event_bus.js';
 import { logger } from '../utils/logger.js';
 
 // ─── Config ────────────────────────────────────────────────────────────────────

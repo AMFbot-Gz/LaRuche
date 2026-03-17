@@ -45,3 +45,4 @@ patcheck.tmp
 .laruche/logs/
 .laruche/.initialized
 .env.auto
+agents/memory/vector_store/

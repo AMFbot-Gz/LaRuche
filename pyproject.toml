@@ -32,6 +32,10 @@ dev-dependencies = [
   "anthropic>=0.40",
   "numpy>=1.26",
   "cryptography>=42.0",
+  "pillow>=10.0",
+  "mss>=9.0",
+  "pytesseract>=0.3.10",
+  "pyautogui>=0.9.54",
 ]
 
 [project.optional-dependencies]

@@ -32,6 +32,7 @@ from agents.brain.schemas.brain_schemas import (
     ThinkResponse,
 )
 from agents.brain.services.model_router_service import MODEL_REGISTRY, ModelRouterService
+from agents.brain.services.claude_architecte import get_architecte
 
 # ─── App ──────────────────────────────────────────────────────────────────────
 
@@ -145,6 +146,39 @@ async def chat(req: ChatRequest) -> ChatResponse:
         routing_reason = profile.routing_reason,
         duration_ms    = duration_ms,
     )
+
+
+# ─── Architect endpoint ───────────────────────────────────────────────────────
+
+
+from pydantic import BaseModel as _BaseModel
+
+
+class ArchitectRequest(_BaseModel):
+    message: str
+    reset_history: bool = False
+
+
+class ArchitectResponse(_BaseModel):
+    reply: str
+    model: str = "claude-opus-4-6"
+
+
+@app.post("/architect", response_model=ArchitectResponse)
+async def architect(req: ArchitectRequest) -> ArchitectResponse:
+    """
+    Claude Architecte de Ruche — boucle agentique jusqu'à 8 tours.
+    Reçoit un message texte, appelle les APIs Chimera via tool use, retourne la réponse.
+    Raises 503 si ANTHROPIC_API_KEY absent.
+    """
+    archi = get_architecte()
+    if req.reset_history:
+        archi.reset_history()
+    try:
+        reply = await archi.handle_message(req.message)
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    return ArchitectResponse(reply=reply)
 
 
 # ─── Lancement direct ─────────────────────────────────────────────────────────

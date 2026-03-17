@@ -1,0 +1,35 @@
+FROM python:3.12-slim
+
+# Système — tesseract pour l'OCR (perception agent)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# uv — gestionnaire Python rapide
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+WORKDIR /app
+
+# Copie uniquement les fichiers de deps d'abord (cache Docker)
+COPY pyproject.toml uv.lock ./
+COPY agents/ ./agents/
+
+# Installation des dépendances
+RUN uv sync --no-dev
+
+# Variables d'environnement
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Port exposé via la variable PORT (surchargée par docker-compose)
+ARG PORT=8001
+ENV PORT=${PORT}
+EXPOSE ${PORT}
+
+# Commande par défaut (surchargée par docker-compose via command:)
+CMD ["uv", "run", "uvicorn", "agents.orchestration.orchestration_agent:app", "--host", "0.0.0.0", "--port", "8001"]

@@ -16,10 +16,14 @@ import { usePathname } from 'next/navigation';
 import { useChimeraStore } from '../../store/chimera';
 
 const NAV_ITEMS = [
-  { href: '/chimera',  icon: '🧠', label: 'Command Center' },
-  { href: '/sessions', icon: '🖥', label: 'Computer Use'   },
+  { href: '/chimera',  icon: '🧠', label: 'Overview'       },
+  { href: '/missions', icon: '🎯', label: 'Missions'        },
   { href: '/agents',   icon: '🐝', label: 'Agents'         },
+  { href: '/memory',   icon: '💾', label: 'Memory'         },
   { href: '/skills',   icon: '🧩', label: 'Skills'         },
+  { href: '/sessions', icon: '🖥', label: 'Computer Use'   },
+  { href: '/logs',     icon: '📡', label: 'Logs'           },
+  { href: '/settings', icon: '⚙️', label: 'Settings'       },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

@@ -372,7 +372,11 @@ dev = [
     { name = "fastapi" },
     { name = "flake8" },
     { name = "httpx" },
+    { name = "mss" },
     { name = "numpy" },
+    { name = "pillow" },
+    { name = "pyautogui" },
+    { name = "pytesseract" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "python-dotenv" },
@@ -392,7 +396,11 @@ dev = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "flake8", specifier = ">=7.0" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "mss", specifier = ">=9.0" },
     { name = "numpy", specifier = ">=1.26" },
+    { name = "pillow", specifier = ">=10.0" },
+    { name = "pyautogui", specifier = ">=0.9.54" },
+    { name = "pytesseract", specifier = ">=0.3.10" },
     { name = "pytest", specifier = ">=8.0" },
     { name = "pytest-asyncio", specifier = ">=0.23" },
     { name = "python-dotenv", specifier = ">=1.0" },
@@ -564,6 +572,7 @@ name = "chimera-perception"
 version = "1.0.0"
 source = { virtual = "agents/perception" }
 dependencies = [
+    { name = "anthropic" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "mss" },
@@ -575,6 +584,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", specifier = ">=0.40.0" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "mss", specifier = ">=9.0" },

@@ -17,7 +17,7 @@ import { readFile as readFileAsync, access } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { getAllBalances } from '../market/creditSystem.js';
-import { writeCommand } from '../../core/chimera_bus.js';
+import { writeCommand } from '../core/chimera_bus.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '../..');

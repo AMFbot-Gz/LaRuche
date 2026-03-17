@@ -90,6 +90,7 @@ services:
   agent-orchestration:
     <<: *python-agent
     ports: ["8001:8001"]
+    command: ["uv", "run", "uvicorn", "agents.orchestration.orchestration_agent:app", "--host", "0.0.0.0", "--port", "8001"]
     environment:
       - PORT=8001
       - CHIMERA_SECRET=${CHIMERA_SECRET}
@@ -99,6 +100,7 @@ services:
   agent-perception:
     <<: *python-agent
     ports: ["8002:8002"]
+    command: ["uv", "run", "uvicorn", "agents.perception.perception_agent:app", "--host", "0.0.0.0", "--port", "8002"]
     environment:
       - PORT=8002
     volumes:
@@ -107,6 +109,7 @@ services:
   agent-brain:
     <<: *python-agent
     ports: ["8003:8003"]
+    command: ["uv", "run", "uvicorn", "agents.brain.brain:app", "--host", "0.0.0.0", "--port", "8003"]
     environment:
       - PORT=8003
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
@@ -115,14 +118,14 @@ services:
   agent-executor:
     <<: *python-agent
     ports: ["8004:8004"]
+    command: ["uv", "run", "uvicorn", "agents.executor.executor_agent:app", "--host", "0.0.0.0", "--port", "8004"]
     environment:
       - PORT=8004
-    deploy:
-      replicas: 2
 
   agent-evolution:
     <<: *python-agent
     ports: ["8005:8005"]
+    command: ["uv", "run", "uvicorn", "agents.evolution.auto_coder_bee:app", "--host", "0.0.0.0", "--port", "8005"]
     environment:
       - PORT=8005
       - GITHUB_TOKEN=${GITHUB_TOKEN}
@@ -130,6 +133,7 @@ services:
   agent-memory:
     <<: *python-agent
     ports: ["8006:8006"]
+    command: ["uv", "run", "uvicorn", "agents.memory.memory_agent:app", "--host", "0.0.0.0", "--port", "8006"]
     environment:
       - PORT=8006
       - CHROMADB_HOST=chromadb
@@ -140,6 +144,7 @@ services:
   agent-mcp-bridge:
     <<: *python-agent
     ports: ["8007:8007"]
+    command: ["sh", "-c", "cd agents/mcp-bridge && uv run uvicorn mcp_bridge_agent:app --host 0.0.0.0 --port 8007"]
     environment:
       - PORT=8007
       - QUEEN_URL=http://queen:3000

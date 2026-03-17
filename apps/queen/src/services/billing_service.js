@@ -4,9 +4,16 @@
  */
 import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-11-20.acacia',
-});
+// Stripe lazy — ne crash pas si STRIPE_SECRET_KEY absent (dev sans billing)
+let _stripe = null;
+function getStripe() {
+  if (!_stripe) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) throw new Error('STRIPE_SECRET_KEY manquant — billing désactivé. Ajoute la clé dans .env pour utiliser les routes /api/billing.');
+    _stripe = new Stripe(key, { apiVersion: '2024-11-20.acacia' });
+  }
+  return _stripe;
+}
 
 // Price IDs Stripe (à configurer dans .env après création des produits)
 export const PLANS = {
@@ -36,9 +43,9 @@ export class BillingService {
    * Recherche d'abord par email pour éviter les doublons.
    */
   async getOrCreateCustomer(userId, email) {
-    const existing = await stripe.customers.list({ email, limit: 1 });
+    const existing = await getStripe().customers.list({ email, limit: 1 });
     if (existing.data.length > 0) return existing.data[0];
-    return stripe.customers.create({ email, metadata: { chimera_user_id: userId } });
+    return getStripe().customers.create({ email, metadata: { chimera_user_id: userId } });
   }
 
   /**
@@ -50,7 +57,7 @@ export class BillingService {
     const planConfig = PLANS[plan];
     if (!planConfig?.stripePriceId) throw new Error(`Plan invalide ou gratuit: ${plan}`);
 
-    return stripe.checkout.sessions.create({
+    return getStripe().checkout.sessions.create({
       customer: customer.id,
       payment_method_types: ['card'],
       line_items: [{ price: planConfig.stripePriceId, quantity: 1 }],
@@ -67,7 +74,7 @@ export class BillingService {
    * Permet au client de modifier/annuler son abonnement directement via Stripe.
    */
   async createPortalSession(customerId, returnUrl) {
-    return stripe.billingPortal.sessions.create({
+    return getStripe().billingPortal.sessions.create({
       customer: customerId,
       return_url: returnUrl || `${process.env.APP_URL}/settings/billing`,
     });
@@ -78,7 +85,7 @@ export class BillingService {
    * Lance une erreur Stripe si la signature est invalide.
    */
   constructWebhookEvent(payload, signature) {
-    return stripe.webhooks.constructEvent(
+    return getStripe().webhooks.constructEvent(
       payload,
       signature,
       process.env.STRIPE_WEBHOOK_SECRET || ''
