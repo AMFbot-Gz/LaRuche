@@ -110,10 +110,3 @@ services:
       - NEXT_PUBLIC_WS_URL=ws://localhost:3000
       - NEXT_PUBLIC_DASHBOARD_WS_URL=ws://localhost:9001
 
-  # ─── Gateway ─────────────────────────────────────────────────────────────
-
-  gateway:
-    volumes:
-      - ./apps/gateway/src:/app/src:ro
-    environment:
-      - NODE_ENV=development

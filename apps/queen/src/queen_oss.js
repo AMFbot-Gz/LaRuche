@@ -32,7 +32,6 @@ import { startDashboardWSServer, broadcastDashboard } from './services/websocket
 import { resilientFireAndForget, SERVICES } from './utils/resilientFetch.js';
 import { isFirstRun, printWelcomeBanner, runFirstRunChecks, markInitialized } from './utils/firstRun.js';
 import { ComputerUseLoop } from './services/computer_use_loop.js';
-import { ComputerUseLoop as ComputerUseLoopSimple, setupComputerUseRoutes } from './computer_use_loop.js';
 import { hitlManager } from './core/hitl_manager.js';
 import { ProactiveLoop } from './proactive_loop.js';
 
@@ -785,10 +784,6 @@ proactive.start();
 if (STANDALONE) {
   logger.info("🌐 Mode Standalone activé — Telegram désactivé");
   const { app: standaloneApp } = startStandaloneServer({ loadMissions, saveMission, runMission, autoDetectRoles, broadcastHUD, logger, subagentManager, healthMonitor, missionCache: _missionCache, eventBus, computerUseLoop });
-
-  // Boucle Computer Use légère (Tony Stark mode) — routes supplémentaires
-  const cuLoop = new ComputerUseLoopSimple({ log: logger });
-  setupComputerUseRoutes(standaloneApp, cuLoop);
 
   const shutdown = () => { logger.info("🛑 Arrêt en cours..."); wss.close(); process.exit(0); };
   process.once("SIGINT", shutdown);
