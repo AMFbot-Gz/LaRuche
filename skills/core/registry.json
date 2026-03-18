@@ -1,6 +1,6 @@
 {
-  "version": "1.4.0",
-  "lastUpdated": "2026-03-18T21:00:00.000Z",
+  "version": "1.5.0",
+  "lastUpdated": "2026-03-18T21:53:16.309Z",
   "skills": [
     {
       "name": "accessibility_reader",
@@ -486,6 +486,108 @@
         "machines connectees"
       ],
       "created": "2026-03-18T00:00:00.000Z"
+    },
+    {
+      "name": "email-triage",
+      "description": "Triage intelligent des emails Gmail — urgent/normal/spam, rapport Telegram-ready",
+      "version": "1.0.0",
+      "category": "productivity",
+      "author": "ghost-os-migration",
+      "tier": "core",
+      "tags": [
+        "email",
+        "triage",
+        "gmail",
+        "classification",
+        "urgent"
+      ]
+    },
+    {
+      "name": "google-workspace",
+      "description": "Gmail + Google Calendar via OAuth2 — listEmails, sendEmail, listEvents",
+      "version": "1.0.0",
+      "category": "integration",
+      "author": "ghost-os-migration",
+      "tier": "core",
+      "tags": [
+        "google",
+        "gmail",
+        "calendar",
+        "oauth2",
+        "email"
+      ]
+    },
+    {
+      "name": "shopify-backend",
+      "description": "Shopify Admin API — getOrders, getProducts, updateInventory",
+      "version": "1.0.0",
+      "category": "integration",
+      "author": "ghost-os-migration",
+      "tier": "core",
+      "tags": [
+        "shopify",
+        "ecommerce",
+        "orders",
+        "products",
+        "inventory"
+      ]
+    },
+    {
+      "name": "picoclaw-satellite",
+      "description": "Satellite léger Go — délègue missions simples hors Ollama principal",
+      "version": "1.0.0",
+      "category": "integration",
+      "author": "ghost-os-migration",
+      "tier": "community",
+      "tags": [
+        "satellite",
+        "léger",
+        "rapide",
+        "picoclaw",
+        "go"
+      ]
+    },
+    {
+      "name": "ruche-corps-bridge",
+      "description": "Bridge vers les 58 outils Python de ruche-corps (computer use, shell, web, mémoire, Telegram)",
+      "version": "1.0.0",
+      "category": "integration",
+      "author": "ghost-os-migration",
+      "tier": "core",
+      "tags": [
+        "ruche-corps",
+        "bridge",
+        "python",
+        "tools",
+        "computer-use"
+      ]
+    },
+    {
+      "name": "self-repair",
+      "description": "Analyse et répare automatiquement les erreurs des services PM2",
+      "version": "1.0.0",
+      "category": "system",
+      "author": "ghost-os-migration",
+      "tier": "core",
+      "tags": [
+        "self-repair"
+      ]
+    },
+    {
+      "name": "stitch-workflows",
+      "description": "Déclenche les workflows stitch: analyse vente, CRM, rapport, lead scoring",
+      "version": "1.0.0",
+      "category": "business",
+      "author": "ghost-os-migration",
+      "tier": "community",
+      "tags": [
+        "stitch",
+        "vente",
+        "crm",
+        "pipeline",
+        "workflow",
+        "business"
+      ]
     }
   ]
 }
