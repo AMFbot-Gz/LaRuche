@@ -247,7 +247,7 @@ class ReActPlanner:
         Retourne la réponse textuelle du LLM, ou None si le Brain est indisponible.
         """
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=90.0) as client:
                 resp = await client.post(
                     f"{self._brain_url}/think",
                     json={"prompt": prompt, "task_type": "reasoning"},
@@ -320,7 +320,7 @@ class ReActPlanner:
         url = f"http://localhost:{port}{path}"
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=90.0) as client:
                 resp = await client.request(method, url, json=params)
                 data = resp.json()
                 # Limiter la taille de l'observation pour le prochain prompt

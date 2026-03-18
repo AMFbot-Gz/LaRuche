@@ -290,7 +290,7 @@ async def _execute_mission(
             agent    = step.agent,
             endpoint = step.endpoint,
             payload  = step.payload,
-            timeout  = min(30, req.timeout),
+            timeout  = min(90, req.timeout),
         )
 
         step.duration_ms = result.get("duration_ms", int((time.monotonic() - step_t0) * 1000))
