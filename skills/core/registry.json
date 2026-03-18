@@ -1,6 +1,6 @@
 {
-  "version": "1.3.0",
-  "lastUpdated": "2026-03-18T00:00:00.000Z",
+  "version": "1.4.0",
+  "lastUpdated": "2026-03-18T21:00:00.000Z",
   "skills": [
     {
       "name": "accessibility_reader",
@@ -9,7 +9,13 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["accessibility", "macos", "semantic", "ui", "computer-use"],
+      "tags": [
+        "accessibility",
+        "macos",
+        "semantic",
+        "ui",
+        "computer-use"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -19,7 +25,13 @@
       "category": "integration",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["bridge", "python", "mission", "queen", "brain"],
+      "tags": [
+        "bridge",
+        "python",
+        "mission",
+        "queen",
+        "brain"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -29,7 +41,13 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["accessibility", "semantic", "ui", "find", "computer-use"],
+      "tags": [
+        "accessibility",
+        "semantic",
+        "ui",
+        "find",
+        "computer-use"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -39,7 +57,12 @@
       "category": "browser",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["safari", "url", "navigation", "browser"],
+      "tags": [
+        "safari",
+        "url",
+        "navigation",
+        "browser"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -49,7 +72,13 @@
       "category": "network",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["http", "fetch", "get", "post", "network"],
+      "tags": [
+        "http",
+        "fetch",
+        "get",
+        "post",
+        "network"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -59,7 +88,12 @@
       "category": "filesystem",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["files", "disk", "size", "filesystem"],
+      "tags": [
+        "files",
+        "disk",
+        "size",
+        "filesystem"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -69,7 +103,12 @@
       "category": "system",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["macos", "app", "launch", "system"],
+      "tags": [
+        "macos",
+        "app",
+        "launch",
+        "system"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -79,7 +118,12 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["keyboard", "enter", "input", "computer-use"],
+      "tags": [
+        "keyboard",
+        "enter",
+        "input",
+        "computer-use"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -89,7 +133,12 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["keyboard", "key", "input", "computer-use"],
+      "tags": [
+        "keyboard",
+        "key",
+        "input",
+        "computer-use"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -99,7 +148,11 @@
       "category": "filesystem",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["file", "read", "filesystem"],
+      "tags": [
+        "file",
+        "read",
+        "filesystem"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -109,7 +162,12 @@
       "category": "system",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["shell", "command", "exec", "system"],
+      "tags": [
+        "shell",
+        "command",
+        "exec",
+        "system"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -119,7 +177,12 @@
       "category": "system",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["shell", "whitelist", "exec", "system"],
+      "tags": [
+        "shell",
+        "whitelist",
+        "exec",
+        "system"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -129,7 +192,13 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["accessibility", "semantic", "screen", "computer-use", "perception"],
+      "tags": [
+        "accessibility",
+        "semantic",
+        "screen",
+        "computer-use",
+        "perception"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -139,7 +208,13 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["accessibility", "semantic", "click", "computer-use", "interaction"],
+      "tags": [
+        "accessibility",
+        "semantic",
+        "click",
+        "computer-use",
+        "interaction"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -149,7 +224,12 @@
       "category": "analysis",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["project", "summary", "structure", "analysis"],
+      "tags": [
+        "project",
+        "summary",
+        "structure",
+        "analysis"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -159,7 +239,12 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["screenshot", "macos", "capture", "computer-use"],
+      "tags": [
+        "screenshot",
+        "macos",
+        "capture",
+        "computer-use"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -169,7 +254,11 @@
       "category": "notification",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["telegram", "notification", "messaging"],
+      "tags": [
+        "telegram",
+        "notification",
+        "messaging"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -179,7 +268,13 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["keyboard", "text", "input", "applescript", "computer-use"],
+      "tags": [
+        "keyboard",
+        "text",
+        "input",
+        "applescript",
+        "computer-use"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -189,7 +284,13 @@
       "category": "computer-use",
       "author": "chimera-core",
       "tier": "core",
-      "tags": ["accessibility", "semantic", "wait", "computer-use", "synchronization"],
+      "tags": [
+        "accessibility",
+        "semantic",
+        "wait",
+        "computer-use",
+        "synchronization"
+      ],
       "created": "2026-03-12T00:00:00.000Z"
     },
     {
@@ -199,7 +300,12 @@
       "category": "filesystem",
       "author": "claude-architecte",
       "tier": "community",
-      "tags": ["downloads", "organisation", "filesystem", "automation"],
+      "tags": [
+        "downloads",
+        "organisation",
+        "filesystem",
+        "automation"
+      ],
       "created": "2026-03-13T03:01:30.591Z"
     },
     {
@@ -209,7 +315,12 @@
       "category": "filesystem",
       "author": "claude-architecte",
       "tier": "community",
-      "tags": ["screenshots", "organisation", "compression", "filesystem"],
+      "tags": [
+        "screenshots",
+        "organisation",
+        "compression",
+        "filesystem"
+      ],
       "created": "2026-03-13T03:03:06.022Z"
     },
     {
@@ -219,7 +330,12 @@
       "category": "browser",
       "author": "claude-architecte",
       "tier": "learned",
-      "tags": ["google", "safari", "browser", "url"],
+      "tags": [
+        "google",
+        "safari",
+        "browser",
+        "url"
+      ],
       "learned_from": "Demande utilisateur : sauvegarder un skill pour ouvrir Google dans Safari",
       "created": "2026-03-13T04:48:18.571530"
     },
@@ -230,7 +346,12 @@
       "category": "system",
       "author": "claude-architecte",
       "tier": "learned",
-      "tags": ["world-state", "memory", "mission", "lifecycle"],
+      "tags": [
+        "world-state",
+        "memory",
+        "mission",
+        "lifecycle"
+      ],
       "learned_from": "Mission: créer habitude de mise à jour world_state après chaque mission",
       "created": "2026-03-13T05:46:43.682655"
     },
@@ -241,7 +362,12 @@
       "category": "integration",
       "author": "claude-architecte",
       "tier": "learned",
-      "tags": ["claude-code", "mcp", "non-interactive", "integration"],
+      "tags": [
+        "claude-code",
+        "mcp",
+        "non-interactive",
+        "integration"
+      ],
       "learned_from": "Test de communication avec Claude Code depuis LaRuche MCP",
       "created": "2026-03-13T08:48:08.958958"
     },
@@ -252,7 +378,13 @@
       "category": "computer-use",
       "author": "claude-architecte",
       "tier": "learned",
-      "tags": ["mouse", "macos", "quartz", "hid", "computer-use"],
+      "tags": [
+        "mouse",
+        "macos",
+        "quartz",
+        "hid",
+        "computer-use"
+      ],
       "learned_from": "Test de contrôle souris via HID — contournement du module HID MCP cassé",
       "created": "2026-03-13T23:35:53.559808"
     },
@@ -263,7 +395,12 @@
       "category": "filesystem",
       "author": "claude-architecte",
       "tier": "system",
-      "tags": ["screenshots", "organisation", "filesystem", "date"],
+      "tags": [
+        "screenshots",
+        "organisation",
+        "filesystem",
+        "date"
+      ],
       "created": "2026-03-13T03:03:06.016Z"
     },
     {
@@ -273,8 +410,82 @@
       "category": "filesystem",
       "author": "claude-architecte",
       "tier": "community",
-      "tags": ["downloads", "organisation", "filesystem", "type"],
+      "tags": [
+        "downloads",
+        "organisation",
+        "filesystem",
+        "type"
+      ],
       "created": "2026-03-13T03:01:30.565Z"
+    },
+    {
+      "name": "ollama_control",
+      "description": "Controle Ollama via CLI natif — list, pull, run, delete, show, ps. Models: llama3.2:3b, llava:7b, ghost-os-architect et plus",
+      "version": "1.0.0",
+      "category": "ai-tools",
+      "author": "chimera-core",
+      "tier": "core",
+      "tags": [
+        "ollama",
+        "llm",
+        "models",
+        "ai",
+        "local"
+      ],
+      "triggers": [
+        "ollama",
+        "liste les modeles",
+        "ollama list",
+        "telecharge modele",
+        "ollama pull",
+        "genere avec ollama"
+      ],
+      "created": "2026-03-18T00:00:00.000Z"
+    },
+    {
+      "name": "docker_control",
+      "description": "Controle Docker via CLI natif — ps, start, stop, restart, logs, images, stats, info",
+      "version": "1.0.0",
+      "category": "devops",
+      "author": "chimera-core",
+      "tier": "core",
+      "tags": [
+        "docker",
+        "containers",
+        "devops",
+        "infra"
+      ],
+      "triggers": [
+        "docker",
+        "containers",
+        "demarre container",
+        "arrete container",
+        "logs docker",
+        "images docker"
+      ],
+      "created": "2026-03-18T00:00:00.000Z"
+    },
+    {
+      "name": "tailscale_control",
+      "description": "Controle Tailscale VPN via CLI natif — status, ip, ping, netcheck",
+      "version": "1.0.0",
+      "category": "network",
+      "author": "chimera-core",
+      "tier": "core",
+      "tags": [
+        "tailscale",
+        "vpn",
+        "network",
+        "mesh"
+      ],
+      "triggers": [
+        "tailscale",
+        "mon vpn",
+        "ip tailscale",
+        "statut reseau",
+        "machines connectees"
+      ],
+      "created": "2026-03-18T00:00:00.000Z"
     }
   ]
 }
