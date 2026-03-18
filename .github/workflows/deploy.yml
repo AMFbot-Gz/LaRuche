@@ -1,0 +1,94 @@
+name: Deploy LaRuche
+
+on:
+  push:
+    branches: [main]
+
+# Un seul déploiement à la fois — annule le précédent si en cours
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  # ─── Tests (bloquants) ───────────────────────────────────────────────────────
+  test:
+    name: Tests complets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - uses: astral-sh/setup-uv@v3
+        with: { version: latest }
+      - run: uv sync
+
+      - name: Tests Node.js (Jest)
+        run: |
+          cd apps/queen
+          node --experimental-vm-modules node_modules/jest/bin/jest.js \
+            test/unit/ --no-coverage --forceExit
+
+      - name: Tests Python (pytest)
+        run: uv run pytest agents/ -q --tb=short
+
+      - name: Build dashboard
+        run: pnpm build --filter=@saas/closer-web
+
+  # ─── Deploy Railway (Queen) ──────────────────────────────────────────────────
+  deploy-railway:
+    name: Deploy Queen → Railway
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy to Railway
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service laruche-queen --detach
+
+      - name: Health check post-deploy
+        run: |
+          sleep 15
+          RAILWAY_URL="${{ secrets.RAILWAY_PUBLIC_URL }}"
+          if [ -n "$RAILWAY_URL" ]; then
+            curl -f "$RAILWAY_URL/api/health" && echo "Queen OK" || echo "Health check failed (non-bloquant)"
+          fi
+
+  # ─── Deploy Vercel (Dashboard) ───────────────────────────────────────────────
+  deploy-vercel:
+    name: Deploy Dashboard → Vercel
+    needs: test
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 9 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
+      - name: Deploy Dashboard
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        working-directory: apps/dashboard
+        run: |
+          vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+          vercel build --prod --token=$VERCEL_TOKEN
+          vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN
