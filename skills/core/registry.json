@@ -1,6 +1,6 @@
 {
-  "version": "1.2.0",
-  "lastUpdated": "2026-03-15T00:00:00.000Z",
+  "version": "1.3.0",
+  "lastUpdated": "2026-03-18T00:00:00.000Z",
   "skills": [
     {
       "name": "accessibility_reader",
@@ -255,6 +255,26 @@
       "tags": ["mouse", "macos", "quartz", "hid", "computer-use"],
       "learned_from": "Test de contrôle souris via HID — contournement du module HID MCP cassé",
       "created": "2026-03-13T23:35:53.559808"
+    },
+    {
+      "name": "organise_screenshots",
+      "description": "Organise les screenshots par date dans ~/Pictures/Screenshots",
+      "version": "1.0.0",
+      "category": "filesystem",
+      "author": "claude-architecte",
+      "tier": "system",
+      "tags": ["screenshots", "organisation", "filesystem", "date"],
+      "created": "2026-03-13T03:03:06.016Z"
+    },
+    {
+      "name": "organise_telechargements",
+      "description": "Organise ~/Downloads par type de fichier (images, docs, vidéos, archives)",
+      "version": "1.0.0",
+      "category": "filesystem",
+      "author": "claude-architecte",
+      "tier": "community",
+      "tags": ["downloads", "organisation", "filesystem", "type"],
+      "created": "2026-03-13T03:01:30.565Z"
     }
   ]
 }
